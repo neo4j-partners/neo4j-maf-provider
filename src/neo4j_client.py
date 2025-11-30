@@ -3,72 +3,96 @@ Neo4j client module for graph database connectivity.
 
 This module provides configuration and connection management for Neo4j,
 including schema retrieval for validation and tool usage.
+
+This is the single source of truth for Neo4j connectivity - used by both
+the general application and the Neo4jContextProvider.
 """
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, field
+import logging
 from typing import Any
 
-from neo4j import AsyncGraphDatabase, AsyncDriver
-from neo4j.exceptions import ServiceUnavailable, AuthError
-from pydantic import Field
+from neo4j import AsyncDriver, AsyncGraphDatabase
+from neo4j.exceptions import AuthError, ServiceUnavailable
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from logging_config import configure_logging
-
-logger = configure_logging(os.getenv("APP_LOG_FILE", ""))
-
-# Allowed entity labels for Cypher query safety (from data-pipeline schema)
-ALLOWED_ENTITY_LABELS = frozenset({
-    "Company",
-    "Executive",
-    "Product",
-    "FinancialMetric",
-    "RiskFactor",
-    "StockType",
-    "Transaction",
-    "TimePeriod",
-})
+logger = logging.getLogger("azureaiapp")
 
 
-class Neo4jConfig(BaseSettings):
+class Neo4jSettings(BaseSettings):
     """
     Neo4j configuration loaded from environment variables.
 
+    All settings use the NEO4J_ prefix for environment variables.
+    Example: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
+
     Attributes:
-        uri: Neo4j connection URI (NEO4J_URI)
-        username: Neo4j username (NEO4J_USERNAME)
-        password: Neo4j password (NEO4J_PASSWORD)
+        uri: Neo4j connection URI
+        username: Neo4j username
+        password: Neo4j password (SecretStr for security)
+        index_name: Default index name for searches
+        index_type: Default index type (vector or fulltext)
+        vector_dimensions: Dimensions for vector embeddings
     """
 
     model_config = SettingsConfigDict(
-        env_prefix="",
+        env_prefix="NEO4J_",
         extra="ignore",
     )
 
+    # Connection settings
     uri: str | None = Field(
         default=None,
-        validation_alias="NEO4J_URI",
+        description="Neo4j connection URI (e.g., bolt://localhost:7687)",
     )
     username: str | None = Field(
         default=None,
-        validation_alias="NEO4J_USERNAME",
+        description="Neo4j username",
     )
-    password: str | None = Field(
+    password: SecretStr | None = Field(
         default=None,
-        validation_alias="NEO4J_PASSWORD",
+        description="Neo4j password",
+    )
+
+    # Index configuration (for context provider)
+    index_name: str | None = Field(
+        default=None,
+        description="Name of the Neo4j index to query",
+    )
+    index_type: str | None = Field(
+        default=None,
+        description="Type of index: 'vector' or 'fulltext'",
+    )
+    vector_dimensions: int | None = Field(
+        default=None,
+        description="Dimensions of embedding vectors (e.g., 1536 for ada-002)",
+    )
+
+    # Context provider mode
+    mode: str | None = Field(
+        default=None,
+        description="Search mode: 'basic' or 'graph_enriched'",
     )
 
     @property
     def is_configured(self) -> bool:
-        """Check if all required Neo4j settings are provided."""
+        """Check if all required Neo4j connection settings are provided."""
         return all([self.uri, self.username, self.password])
 
+    def get_password(self) -> str | None:
+        """Safely retrieve the password value."""
+        if self.password is None:
+            return None
+        return self.password.get_secret_value()
 
-@dataclass
-class GraphSchema:
+
+# Backwards compatibility alias
+Neo4jConfig = Neo4jSettings
+
+
+class GraphSchema(BaseModel):
     """
     Represents the schema of a Neo4j graph database.
 
@@ -79,10 +103,10 @@ class GraphSchema:
         relationship_properties: Dictionary mapping relationship types to their properties
     """
 
-    node_labels: list[str] = field(default_factory=list)
-    relationship_types: list[str] = field(default_factory=list)
-    node_properties: dict[str, list[str]] = field(default_factory=dict)
-    relationship_properties: dict[str, list[str]] = field(default_factory=dict)
+    node_labels: list[str] = Field(default_factory=list)
+    relationship_types: list[str] = Field(default_factory=list)
+    node_properties: dict[str, list[str]] = Field(default_factory=dict)
+    relationship_properties: dict[str, list[str]] = Field(default_factory=dict)
 
     def summary(self) -> str:
         """Return a human-readable summary of the schema."""
@@ -107,26 +131,28 @@ class Neo4jClient:
 
     Use as an async context manager to ensure proper resource cleanup:
 
-        async with Neo4jClient(config) as client:
+        async with Neo4jClient(settings) as client:
             schema = await client.get_schema()
+
+    Can also be used by the Neo4jContextProvider for shared connectivity.
     """
 
-    def __init__(self, config: Neo4jConfig) -> None:
+    def __init__(self, settings: Neo4jSettings) -> None:
         """
         Initialize the Neo4j client.
 
         Args:
-            config: Neo4j configuration with connection details.
+            settings: Neo4j settings with connection details.
 
         Raises:
             ValueError: If required configuration is missing.
         """
-        if not config.is_configured:
+        if not settings.is_configured:
             raise ValueError(
                 "Neo4j configuration incomplete. "
                 "Required: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD"
             )
-        self._config = config
+        self._settings = settings
         self._driver: AsyncDriver | None = None
 
     async def __aenter__(self) -> Neo4jClient:
@@ -147,12 +173,12 @@ class Neo4jClient:
         """
         try:
             self._driver = AsyncGraphDatabase.driver(
-                self._config.uri,
-                auth=(self._config.username, self._config.password),
+                self._settings.uri,
+                auth=(self._settings.username, self._settings.get_password()),
             )
             # Verify connectivity
             await self._driver.verify_connectivity()
-            logger.info(f"Connected to Neo4j at {self._config.uri}")
+            logger.info(f"Connected to Neo4j at {self._settings.uri}")
         except AuthError as e:
             logger.error(f"Neo4j authentication failed: {e}")
             raise ConnectionError(f"Neo4j authentication failed: {e}") from e
@@ -240,98 +266,3 @@ class Neo4jClient:
             result = await session.run(query, parameters or {})
             return await result.data()
 
-    def get_allowed_entity_types(self) -> list[str]:
-        """Get the list of allowed entity types.
-
-        Returns:
-            Sorted list of allowed entity labels.
-        """
-        return sorted(ALLOWED_ENTITY_LABELS)
-
-    async def list_entities_by_type(
-        self,
-        entity_type: str,
-        limit: int = 20,
-    ) -> list[dict[str, str]]:
-        """List entities of a specific type.
-
-        Args:
-            entity_type: The entity label (Company, Executive, Product, etc.).
-            limit: Maximum number of entities to return.
-
-        Returns:
-            List of entities with id and name.
-
-        Raises:
-            ValueError: If entity_type is not in ALLOWED_ENTITY_LABELS.
-        """
-        if entity_type not in ALLOWED_ENTITY_LABELS:
-            raise ValueError(
-                f"Invalid entity type: {entity_type}. "
-                f"Allowed: {sorted(ALLOWED_ENTITY_LABELS)}"
-            )
-
-        # Label is validated above, safe to use in f-string
-        # Use coalesce to fallback to elementId if e.id is not set
-        query = f"""
-        MATCH (e:{entity_type})
-        RETURN coalesce(e.id, elementId(e)) AS id, e.name AS name
-        ORDER BY e.name
-        LIMIT $limit
-        """
-
-        async with self.driver.session() as session:
-            result = await session.run(query, {"limit": limit})
-            data = await result.data()
-            return [
-                {"id": str(record["id"]), "name": record["name"] or ""}
-                for record in data
-            ]
-
-    async def get_entity_relationships(
-        self,
-        entity_name: str,
-        limit: int = 20,
-    ) -> list[dict[str, str]]:
-        """Get relationships for an entity by name.
-
-        Args:
-            entity_name: The entity name to search for (case-insensitive contains).
-            limit: Maximum number of relationships to return.
-
-        Returns:
-            List of relationships with source, relationship type, and target.
-        """
-        query = """
-        MATCH (source)-[r]->(target)
-        WHERE source.name IS NOT NULL
-          AND target.name IS NOT NULL
-          AND toLower(source.name) CONTAINS toLower($entity_name)
-          AND NOT source:Document
-          AND NOT source:Chunk
-          AND NOT target:Document
-          AND NOT target:Chunk
-        RETURN source.name AS source,
-               type(r) AS relationship,
-               target.name AS target,
-               [label IN labels(source) WHERE NOT label STARTS WITH '__'][0] AS source_type,
-               [label IN labels(target) WHERE NOT label STARTS WITH '__'][0] AS target_type
-        LIMIT $limit
-        """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                {"entity_name": entity_name, "limit": limit},
-            )
-            data = await result.data()
-            return [
-                {
-                    "source": record["source"],
-                    "source_type": record["source_type"],
-                    "relationship": record["relationship"],
-                    "target": record["target"],
-                    "target_type": record["target_type"],
-                }
-                for record in data
-            ]

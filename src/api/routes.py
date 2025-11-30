@@ -4,13 +4,17 @@ API routes using Microsoft Agent Framework with Azure AI Foundry.
 Provides REST endpoints for agent status, chat functionality, and semantic search.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from vector_search import SemanticSearchRequest, SemanticSearchResponse
+
+from . import neo4j_utils
 
 router = APIRouter()
 logger = logging.getLogger("azureaiapp")
@@ -18,6 +22,18 @@ logger = logging.getLogger("azureaiapp")
 # In-memory thread storage for conversation tracking (simple demo)
 # In production, use Redis or a database
 _threads: dict = {}
+
+# Allowed entity labels for Cypher query safety
+ALLOWED_ENTITY_LABELS = frozenset({
+    "Company",
+    "Executive",
+    "Product",
+    "FinancialMetric",
+    "RiskFactor",
+    "StockType",
+    "Transaction",
+    "TimePeriod",
+})
 
 
 class ChatRequest(BaseModel):
@@ -218,10 +234,7 @@ async def get_entity_types(request: Request):
             detail="Neo4j not configured. Entity search unavailable."
         )
 
-    neo4j_client = request.app.state.neo4j_client
-    entity_types = neo4j_client.get_allowed_entity_types()
-
-    return EntityTypesResponse(entity_types=entity_types)
+    return EntityTypesResponse(entity_types=sorted(ALLOWED_ENTITY_LABELS))
 
 
 @router.get("/search/entities/{entity_type}", response_model=EntityListResponse)
@@ -241,10 +254,17 @@ async def list_entities(
             detail="Neo4j not configured. Entity search unavailable."
         )
 
+    # Validate entity type before querying
+    if entity_type not in ALLOWED_ENTITY_LABELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid entity type: {entity_type}. Allowed: {sorted(ALLOWED_ENTITY_LABELS)}"
+        )
+
     neo4j_client = request.app.state.neo4j_client
 
     try:
-        results = await neo4j_client.list_entities_by_type(entity_type, limit=limit)
+        results = await neo4j_utils.list_entities_by_type(neo4j_client, entity_type, limit=limit)
 
         entities = [EntityResult(id=r["id"], name=r["name"]) for r in results]
         return EntityListResponse(
@@ -252,8 +272,6 @@ async def list_entities(
             entity_type=entity_type,
             count=len(entities),
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Entity list error: {e}")
         raise HTTPException(status_code=500, detail=f"Entity search failed: {str(e)}")
@@ -279,7 +297,7 @@ async def get_entity_relationships(
     neo4j_client = request.app.state.neo4j_client
 
     try:
-        results = await neo4j_client.get_entity_relationships(entity_name, limit=limit)
+        results = await neo4j_utils.get_entity_relationships(neo4j_client, entity_name, limit=limit)
 
         relationships = [
             RelationshipResult(

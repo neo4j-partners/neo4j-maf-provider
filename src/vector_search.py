@@ -7,7 +7,7 @@ and Neo4j vector indexes, with graph-aware context retrieval.
 
 from __future__ import annotations
 
-import os
+import asyncio
 
 from azure.ai.inference import EmbeddingsClient
 from azure.ai.inference.models import EmbeddingInputType
@@ -15,10 +15,10 @@ from azure.identity import DefaultAzureCredential
 from pydantic import BaseModel, Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from logging_config import configure_logging
+from logging_config import get_logger
 from neo4j_client import Neo4jClient
 
-logger = configure_logging(os.getenv("APP_LOG_FILE", ""))
+logger = get_logger()
 
 
 class VectorSearchConfig(BaseSettings):
@@ -49,6 +49,12 @@ class VectorSearchConfig(BaseSettings):
     vector_index_name: str = Field(
         default="chunkEmbeddings",
         validation_alias="NEO4J_VECTOR_INDEX_NAME",
+    )
+
+    # Neo4j fulltext index name
+    fulltext_index_name: str = Field(
+        default="chunkFulltext",
+        validation_alias="NEO4J_FULLTEXT_INDEX_NAME",
     )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -153,9 +159,9 @@ class VectorSearchClient:
         )
         logger.info(f"Embeddings client initialized: {config.inference_endpoint}")
 
-    def get_embedding(self, text: str) -> list[float]:
+    def _get_embedding_sync(self, text: str) -> list[float]:
         """
-        Generate embedding vector for the given text (for queries).
+        Generate embedding vector synchronously (internal use).
 
         Args:
             text: Text to embed.
@@ -169,9 +175,23 @@ class VectorSearchClient:
             input_type=EmbeddingInputType.QUERY,
         )
         embedding = response.data[0].embedding
-        if isinstance(embedding, list):
-            return embedding
-        raise ValueError(f"Unexpected embedding type: {type(embedding)}")
+        if not isinstance(embedding, list):
+            raise ValueError(f"Unexpected embedding type: {type(embedding)}")
+        return embedding
+
+    async def get_embedding(self, text: str) -> list[float]:
+        """
+        Generate embedding vector for the given text asynchronously.
+
+        Wraps the sync Azure AI SDK call to avoid blocking the event loop.
+
+        Args:
+            text: Text to embed.
+
+        Returns:
+            Embedding vector as list of floats.
+        """
+        return await asyncio.to_thread(self._get_embedding_sync, text)
 
     async def search(
         self,
@@ -188,8 +208,8 @@ class VectorSearchClient:
         Returns:
             List of SearchResult objects with text, score, and graph metadata.
         """
-        # Generate embedding for the query (sync call, but fast)
-        query_embedding = self.get_embedding(query)
+        # Generate embedding for the query asynchronously
+        query_embedding = await self.get_embedding(query)
 
         # Execute vector search with graph context
         cypher_query = f"""

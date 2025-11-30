@@ -1,100 +1,81 @@
-# Neo4j MAF Sample Provider
+# Neo4j Context Provider for Microsoft Agent Framework
 
-A sample AI agent API built with Neo4j GraphRAG and the **Microsoft Agent Framework (2025)** with **Azure AI Foundry**.
+A context provider that enables AI agents to retrieve knowledge graph context from Neo4j, supporting both vector and fulltext search with optional graph enrichment.
 
-This repository provides a production-ready FastAPI application exposing REST endpoints for agent status, chat, and streaming chat, using `AzureAIAgentClient` for persistent agents hosted in Azure AI Foundry.
+## What is a Context Provider?
 
-## Quick Start
+Context providers are plugins for the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) that automatically inject relevant information into an agent's conversation before the AI model processes each message. The Neo4j Context Provider retrieves data from your Neo4j knowledge graph—whether through semantic vector search or keyword-based fulltext search—and enriches agent responses with graph-aware context.
 
-For GitHub Codespaces or Local Dev Container setup, see **[GUIDE_DEV_CONTAINERS.md](GUIDE_DEV_CONTAINERS.md)**.
+For detailed architecture, configuration options, and sample walkthroughs, see **[NEO4J_PROVIDER_ARCHITECTURE.md](NEO4J_PROVIDER_ARCHITECTURE.md)**.
 
-## Prerequisites (Manual Setup)
+## Prerequisites
 
-*   **[uv](https://github.com/astral-sh/uv):** An extremely fast Python package installer and resolver.
-*   **[Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd):** For infrastructure provisioning (`azd login`).
-*   **[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli):** For authentication (`az login`).
-*   **Git**
+- **[uv](https://github.com/astral-sh/uv)**: Fast Python package installer
+- **[Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)**: For infrastructure provisioning
+- **[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)**: For authentication
+- **Neo4j Database**: With vector or fulltext indexes configured
 
 ## Getting Started
 
-### 1. Configure Azure Region
-Run the setup script to select your Azure region and initialize the environment:
+### 1. Provision Azure Infrastructure
 
-```bash
-./scripts/setup_azure.sh
-```
-
-> **Note:** This script clears the `.azure/` directory and Azure-related settings from `.env` to ensure `azd up` creates a fresh environment. Neo4j settings in `.env` are preserved. See [docs/AZ_CLI_GUIDE.md](docs/AZ_CLI_GUIDE.md) for details on environment management.
-
-> **Supported Regions:** `eastus2`, `swedencentral`, or `westus2`
-
-### 2. Provision Infrastructure
-Deploy the Azure AI resources:
+Deploy Azure AI Foundry resources (for embeddings and chat models):
 
 ```bash
 azd up
 ```
 
-> **Note:** This creates an Azure AI Foundry project with two model deployments: **gpt-4o** (for chat completions) and **text-embedding-ada-002** (for vector embeddings). Open [ai.azure.com](https://ai.azure.com/) in the same browser where you're logged into Azure to view your project. See [docs/FOUNDRY_GUIDE.md](docs/FOUNDRY_GUIDE.md) for more details.
-
-> **Note:** For full deployment options (including Container App), see [docs/AZURE_DEPLOY_GUIDE.md](docs/AZURE_DEPLOY_GUIDE.md).
-
-### 3. Install Dependencies
-Use `uv` to sync dependencies defined in `pyproject.toml`.
+### 2. Install Dependencies
 
 ```bash
 uv sync --prerelease=allow
 ```
 
-### 4. Setup Environment Variables
-Run the helper script to pull environment variables from `azd` and create a local `.env` file.
+### 3. Setup Environment Variables
+
+Pull environment variables from azd and create a local `.env` file:
 
 ```bash
 uv run setup_env.py
 ```
 
-### 5. Restore Neo4j Database (Optional)
+Add your Neo4j credentials to `.env`:
 
-> **Note:** If you're using a pre-provisioned Neo4j database, this step is not needed—the data is already loaded.
-
-To restore the financial graph data to your own Neo4j instance:
-
-```bash
-uv run python scripts/restore_neo4j.py
+```
+NEO4J_URI=neo4j+s://your-database.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-password
+NEO4J_INDEX_NAME=your-index-name
 ```
 
-This streams and restores the backup from GitHub, creating:
-- **Nodes:** `AssetManager`, `Company`, `Document`, `Chunk`
-- **Relationships:** `OWNS`, `FILED`, `HAS_CHUNK`
+### 4. Run the Samples
 
-The script reads Neo4j credentials (`NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`) from `.env` automatically.
-
-### 6. Build and Deploy Agents to Azure AI Foundry
-
-**Interactive Agent (CLI)**
-Run the agent directly in your terminal for interactive chat:
+Launch the interactive demo menu:
 
 ```bash
 uv run start-agent
 ```
 
-Type your messages and press Enter to chat. Type `quit` or `exit` to end the session.
-
-**AI Agent API Server**
-Run the AI agent API server with Neo4j GraphRAG integration:
+Or run a specific sample directly:
 
 ```bash
-uv run uvicorn api.main:create_app --factory --reload
+uv run start-agent 3    # Run Context Provider (Fulltext)
+uv run start-agent a    # Run all samples
 ```
 
-The API will be available at `http://localhost:8000`.
+## Samples
 
-## Testing the AI Agent API
+The `src/samples/` directory contains working examples. Run them using `uv run start-agent`:
 
-Run all tests to verify the AI agent endpoints are working:
+| # | Sample | Description |
+|---|--------|-------------|
+| 1 | `agent_memory.py` | Agent Framework conversation memory using threads |
+| 2 | `semantic_search.py` | Direct vector search without Agent Framework |
+| 3 | `context_provider_basic.py` | Fulltext (keyword) search |
+| 4 | `context_provider_vector.py` | Vector search with Azure AI embeddings |
+| 5 | `context_provider_graph_enriched.py` | Graph traversal for rich context |
+| 6 | `aircraft_maintenance_search.py` | Aircraft domain with custom retrieval queries |
+| 7 | `aircraft_flight_delays.py` | Flight operations data analysis |
+| 8 | `component_health.py` | Component status with aggregated maintenance counts |
 
-```bash
-uv run python src/test_server.py all
-```
-
-For individual test options and API endpoint details, see [docs/SERVER_OVERVIEW.md](docs/SERVER_OVERVIEW.md).
+See [NEO4J_PROVIDER_ARCHITECTURE.md](NEO4J_PROVIDER_ARCHITECTURE.md) for detailed walkthroughs of each sample.

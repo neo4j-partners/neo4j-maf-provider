@@ -7,6 +7,8 @@ that can be used for testing the context provider.
 Run with: uv run python src/discover_schema.py
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
@@ -16,8 +18,21 @@ from dotenv import load_dotenv
 # Add src to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from neo4j_client import Neo4jClient, Neo4jConfig
+from api.neo4j_utils import list_entities_by_type
+from neo4j_client import Neo4jClient, Neo4jSettings
 from util import get_env_file_path
+
+# Entity labels to look for when discovering schema
+ALLOWED_ENTITY_LABELS = frozenset({
+    "Company",
+    "Executive",
+    "Product",
+    "FinancialMetric",
+    "RiskFactor",
+    "StockType",
+    "Transaction",
+    "TimePeriod",
+})
 
 
 async def discover_schema() -> None:
@@ -28,7 +43,7 @@ async def discover_schema() -> None:
         load_dotenv(env_path)
         print(f"Loaded environment from: {env_path}\n")
 
-    config = Neo4jConfig()
+    config = Neo4jSettings()
 
     if not config.is_configured:
         print("ERROR: Neo4j not configured.")
@@ -62,13 +77,11 @@ async def discover_schema() -> None:
         print("\n## EXAMPLE ENTITIES (for testing)")
         print("-" * 40)
 
-        # Try common entity types
-        entity_types = ["Company", "Executive", "Product", "Person", "Organization"]
-
-        for entity_type in entity_types:
+        # Try allowed entity types that exist in the schema
+        for entity_type in sorted(ALLOWED_ENTITY_LABELS):
             if entity_type in schema.node_labels:
                 try:
-                    entities = await client.list_entities_by_type(entity_type, limit=5)
+                    entities = await list_entities_by_type(client, entity_type, limit=5)
                     if entities:
                         print(f"\n  {entity_type}:")
                         for e in entities:

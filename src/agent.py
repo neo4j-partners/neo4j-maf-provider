@@ -6,16 +6,14 @@ Framework (2025) with Azure AI Foundry (V2 SDK - azure-ai-projects) integration
 for persistent, service-managed agents.
 """
 
-import os
-
 from agent_framework.azure import AzureAIClient
 from azure.identity.aio import AzureCliCredential
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from logging_config import configure_logging
+from logging_config import get_logger
 
-logger = configure_logging(os.getenv("APP_LOG_FILE", ""))
+logger = get_logger()
 
 
 class AgentConfig(BaseSettings):

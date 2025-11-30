@@ -10,6 +10,8 @@ to interact with Azure AI Foundry. It handles:
 - Exposing REST endpoints for agent interaction
 """
 
+from __future__ import annotations
+
 import contextlib
 import os
 
@@ -18,14 +20,14 @@ from azure.identity.aio import AzureCliCredential
 from dotenv import load_dotenv
 
 from agent import AgentConfig, create_agent_client, create_agent_context
-from logging_config import configure_logging
-from neo4j_client import Neo4jConfig, Neo4jClient, GraphSchema
-from vector_search import VectorSearchConfig, VectorSearchClient
+from logging_config import get_logger
+from neo4j_client import GraphSchema, Neo4jClient, Neo4jSettings
 from util import get_env_file_path
+from vector_search import VectorSearchClient, VectorSearchConfig
 
 from . import routes
 
-logger = configure_logging(os.getenv("APP_LOG_FILE", ""))
+logger = get_logger()
 
 # Tracing flag - set after environment is loaded
 _tracing_enabled = False
@@ -105,7 +107,7 @@ async def initialize_neo4j(stack: contextlib.AsyncExitStack) -> tuple[Neo4jClien
         Tuple of (Neo4jClient, GraphSchema) if successful, (None, None) if not configured
         or connection fails.
     """
-    neo4j_config = Neo4jConfig()
+    neo4j_config = Neo4jSettings()
 
     if not neo4j_config.is_configured:
         logger.info("Neo4j not configured - graph features disabled")

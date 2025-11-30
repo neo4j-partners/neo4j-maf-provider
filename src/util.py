@@ -1,10 +1,13 @@
 # Copyright (c) Microsoft. All rights reserved.
 # Licensed under the MIT license. See LICENSE.md file in the project root for full license information.
 
-import os
-import json
+from __future__ import annotations
 
-def get_env_file_path():
+import json
+import os
+
+
+def get_env_file_path() -> str | None:
     """
     Get the path to the environment file to load.
 
@@ -14,7 +17,7 @@ def get_env_file_path():
     3. Checks .azure/config.json to find the azd-managed .env
 
     Returns:
-        str: Absolute path to the environment file, or None.
+        Absolute path to the environment file, or None.
     """
     # In production, use system environment variables
     if os.getenv("RUNNING_IN_PRODUCTION"):
