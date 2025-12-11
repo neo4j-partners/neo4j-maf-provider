@@ -1,8 +1,8 @@
 """
 Demo: Aircraft Flight Delay Analysis with Graph-Enriched Context.
 
-Shows fulltext search on flight delays with graph traversal
-to enrich results with flight, aircraft, and airport context.
+Shows fulltext search on flight delays using neo4j-graphrag FulltextRetriever
+with graph traversal to enrich results with flight, aircraft, and airport context.
 
 This demo uses the Aircraft database (AIRCRAFT_NEO4J_* env vars).
 """
@@ -85,7 +85,8 @@ async def demo_aircraft_flight_delays() -> None:
     credential = AzureCliCredential()
 
     try:
-        # Create context provider with fulltext search
+        # Create context provider with fulltext search (no embedder needed)
+        # Uses FulltextRetriever internally
         # Use minimal top_k and message_history to avoid context overflow
         provider = Neo4jContextProvider(
             uri=aircraft_uri,

@@ -1,7 +1,7 @@
 """
 Vector search module for semantic search over Neo4j graph database.
 
-This module provides semantic search capabilities using Azure AI Foundry embeddings
+This module provides semantic search capabilities using Microsoft Foundry embeddings
 and Neo4j vector indexes, with graph-aware context retrieval.
 """
 
@@ -23,7 +23,7 @@ logger = get_logger()
 
 class VectorSearchConfig(BaseSettings):
     """
-    Configuration for vector search with Azure AI Foundry embeddings.
+    Configuration for vector search with Microsoft Foundry embeddings.
 
     Uses the same configuration as the data-pipeline for consistency.
     """
@@ -33,7 +33,7 @@ class VectorSearchConfig(BaseSettings):
         extra="ignore",
     )
 
-    # Azure AI Foundry project endpoint
+    # Microsoft Foundry project endpoint
     project_endpoint: str | None = Field(
         default=None,
         validation_alias="AZURE_AI_PROJECT_ENDPOINT",
@@ -123,7 +123,7 @@ class VectorSearchClient:
     """
     Client for performing semantic search with graph-aware context.
 
-    Uses Azure AI Foundry for embeddings and Neo4j vector indexes for search.
+    Uses Microsoft Foundry for embeddings and Neo4j vector indexes for search.
     """
 
     def __init__(
@@ -183,7 +183,7 @@ class VectorSearchClient:
         """
         Generate embedding vector for the given text asynchronously.
 
-        Wraps the sync Azure AI SDK call to avoid blocking the event loop.
+        Wraps the sync Microsoft Foundry SDK call to avoid blocking the event loop.
 
         Args:
             text: Text to embed.

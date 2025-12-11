@@ -287,7 +287,7 @@ The implementation is spread across a few files, each with a specific responsibi
 | Component | Responsibility |
 |-----------|----------------|
 | **Neo4jContextProvider** | The main class that implements the Agent Framework's context provider interface. Handles message processing, search execution, and result formatting. |
-| **VectorizerProtocol** | Defines what a vectorizer must do (convert text to vectors). You can use Azure AI embeddings, OpenAI, or any compatible embedding service. |
+| **VectorizerProtocol** | Defines what a vectorizer must do (convert text to vectors). You can use Microsoft Foundry embeddings, OpenAI, or any compatible embedding service. |
 | **Neo4jClient** | Manages the database connection, executes Cypher queries, and handles errors. |
 | **Neo4jSettings** | Loads configuration from environment variables so you don't have to hardcode credentials. |
 
@@ -366,18 +366,18 @@ Agent: Technology companies face several risk factors, including:
 
 ---
 
-### Sample 2: Vector Search with Azure AI Embeddings
+### Sample 2: Vector Search with Microsoft Foundry Embeddings
 
 **File**: `context_provider_vector.py`
 
-**What it demonstrates**: Semantic search using vector embeddings from Azure AI Foundry.
+**What it demonstrates**: Semantic search using vector embeddings from Microsoft Foundry.
 
 **Configuration used**:
 - `index_type="vector"` — Uses Neo4j's vector index
 - `vectorizer=AzureAIVectorizer(...)` — Custom vectorizer using Azure's embedding model
 - Finds semantically similar content, not just keyword matches
 
-**How it works**: The sample includes an `AzureAIVectorizer` class that calls Azure AI Foundry's embedding endpoint. When you ask a question:
+**How it works**: The sample includes an `AzureAIVectorizer` class that calls Microsoft Foundry's embedding endpoint. When you ask a question:
 1. The provider embeds your question into a 1536-dimensional vector
 2. Searches for document chunks with similar embeddings
 3. Returns conceptually related content even if exact words differ
@@ -458,9 +458,9 @@ The company faces several risks:
 Agent: Microsoft's cloud services, primarily Azure, include:
 - Computing, networking, storage, AI, IoT
 - Cognitive services and machine learning
-- Azure AI and Azure IoT Edge
+- Microsoft Foundry and Azure IoT Edge
 
-Products: Azure, Microsoft Cloud, Azure AI
+Products: Azure, Microsoft Cloud, Microsoft Foundry
 
 Business Risks:
 1. **Competitive Risks**: Strong competition from AWS and Google Cloud

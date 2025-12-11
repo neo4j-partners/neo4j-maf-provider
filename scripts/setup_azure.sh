@@ -45,7 +45,7 @@ EOF
 }
 
 echo ""
-echo "Azure AI Foundry Agent Service requires one of these regions:"
+echo "Microsoft Foundry Agent Service requires one of these regions:"
 echo "  1) East US 2 (eastus2)"
 echo "  2) Sweden Central (swedencentral)"
 echo "  3) West US 2 (westus2)"

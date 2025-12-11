@@ -1,8 +1,8 @@
 """
-Agent management module using Microsoft Agent Framework with Azure AI Foundry.
+Agent management module using Microsoft Agent Framework with Microsoft Foundry.
 
 This module provides configuration and agent creation using the Microsoft Agent
-Framework (2025) with Azure AI Foundry (V2 SDK - azure-ai-projects) integration
+Framework (2025) with Microsoft Foundry (V2 SDK - azure-ai-projects) integration
 for persistent, service-managed agents.
 """
 
@@ -24,7 +24,7 @@ class AgentConfig(BaseSettings):
         name: Name of the agent (AZURE_AI_AGENT_NAME)
         model: Model deployment name (AZURE_AI_MODEL_NAME)
         instructions: System instructions for the agent
-        project_endpoint: Azure AI Foundry project endpoint (AZURE_AI_PROJECT_ENDPOINT)
+        project_endpoint: Microsoft Foundry project endpoint (AZURE_AI_PROJECT_ENDPOINT)
     """
 
     model_config = SettingsConfigDict(

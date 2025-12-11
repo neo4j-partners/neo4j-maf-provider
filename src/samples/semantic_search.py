@@ -2,7 +2,7 @@
 Demo: Semantic search over Neo4j graph database.
 
 This sample demonstrates semantic search with graph-aware context retrieval
-using Azure AI embeddings and Neo4j vector indexes.
+using Microsoft Foundry embeddings and Neo4j vector indexes.
 """
 
 from __future__ import annotations

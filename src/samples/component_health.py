@@ -1,8 +1,8 @@
 """
 Demo: Component Health Analysis with Graph-Enriched Context.
 
-Shows fulltext search on components with graph traversal
-to enrich results with aircraft, system, and maintenance context.
+Shows fulltext search on components using neo4j-graphrag FulltextRetriever
+with graph traversal to enrich results with aircraft, system, and maintenance context.
 
 This demo uses the Aircraft database (AIRCRAFT_NEO4J_* env vars).
 """
@@ -87,7 +87,8 @@ async def demo_component_health() -> None:
     credential = AzureCliCredential()
 
     try:
-        # Create context provider with fulltext search
+        # Create context provider with fulltext search (no embedder needed)
+        # Uses FulltextRetriever internally
         # Use minimal top_k to avoid context overflow
         provider = Neo4jContextProvider(
             uri=aircraft_uri,

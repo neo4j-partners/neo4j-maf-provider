@@ -1,8 +1,8 @@
 """
-FastAPI application using Microsoft Agent Framework with Azure AI Foundry.
+FastAPI application using Microsoft Agent Framework with Microsoft Foundry.
 
 This module sets up a FastAPI app that uses the Microsoft Agent Framework
-to interact with Azure AI Foundry. It handles:
+to interact with Microsoft Foundry. It handles:
 - Loading environment configuration
 - Creating the agent via Agent Framework with Foundry backend
 - Connecting to Neo4j and validating schema on startup
@@ -64,7 +64,7 @@ async def configure_tracing(app: fastapi.FastAPI, credential: AzureCliCredential
     Args:
         app: FastAPI application to store connection string
         credential: Azure credential for API access
-        endpoint: Azure AI Project endpoint
+        endpoint: Microsoft Foundry Project endpoint
     """
     if not _tracing_enabled:
         return

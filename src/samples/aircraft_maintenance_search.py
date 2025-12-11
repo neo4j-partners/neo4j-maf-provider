@@ -1,8 +1,8 @@
 """
 Demo: Aircraft Maintenance Search with Graph-Enriched Context.
 
-Shows fulltext search on maintenance events with graph traversal
-to enrich results with aircraft, system, and component context.
+Shows fulltext search on maintenance events using neo4j-graphrag FulltextRetriever
+with graph traversal to enrich results with aircraft, system, and component context.
 
 This demo uses the Aircraft database (AIRCRAFT_NEO4J_* env vars).
 """
@@ -84,7 +84,8 @@ async def demo_aircraft_maintenance_search() -> None:
     credential = AzureCliCredential()
 
     try:
-        # Create context provider with fulltext search (no vectorizer needed)
+        # Create context provider with fulltext search (no embedder needed)
+        # Uses FulltextRetriever internally
         provider = Neo4jContextProvider(
             uri=aircraft_uri,
             username=aircraft_username,

@@ -9,7 +9,7 @@ param environmentName string
 @description('Location for all resources. Defaults to resource group location.')
 param location string = resourceGroup().location
 
-@description('The Azure AI Foundry Hub resource name. If ommited will be generated')
+@description('The Microsoft Foundry Hub resource name. If ommited will be generated')
 param aiProjectName string = ''
 @description('The AI Services resource name. If ommited will be generated')
 param aiServicesName string = ''

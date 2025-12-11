@@ -76,7 +76,7 @@ This project uses **resource-group-scoped deployment** - all Azure resources dep
 
 ```
 Your Resource Group
-├── Azure AI Foundry Project (AI Hub + Project)
+├── Microsoft Foundry Project (AI Hub + Project)
 ├── Azure OpenAI Service (gpt-4o + text-embedding-ada-002)
 ├── Storage Account
 ├── Container Registry
@@ -109,7 +109,7 @@ azd up
 
 ### Supported Regions
 
-Azure AI Foundry only works in these regions:
+Microsoft Foundry only works in these regions:
 - eastus2 (Recommended)
 - swedencentral
 - westus2

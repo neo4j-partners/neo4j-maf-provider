@@ -1,10 +1,8 @@
 """
 Demo: Neo4j Context Provider with Graph-Enriched Mode.
 
-Shows semantic search using vector index combined with graph traversal
-to enrich results with company, product, and risk factor context.
-
-This demonstrates the retrieval_query pattern from neo4j-graphrag.
+Shows semantic search using neo4j-graphrag VectorCypherRetriever with
+graph traversal to enrich results with company, product, and risk factor context.
 """
 
 from __future__ import annotations
@@ -20,11 +18,7 @@ def print_header(title: str) -> None:
 
 
 # Graph-enriched retrieval query
-# This query is appended after the vector search:
-#   CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
-#   YIELD node, score
-#   <retrieval_query here>
-#
+# This query is appended after the vector search by VectorCypherRetriever.
 # Variables available from vector search:
 #   - node: The Chunk node matched by vector similarity
 #   - score: Similarity score (0.0 to 1.0)
@@ -46,67 +40,15 @@ ORDER BY score DESC
 """
 
 
-class AzureAIVectorizer:
-    """
-    Vectorizer using Azure AI Foundry embeddings.
-
-    Implements VectorizerProtocol for use with Neo4jContextProvider.
-    """
-
-    def __init__(self, endpoint: str, deployment: str = "text-embedding-ada-002") -> None:
-        """
-        Initialize the Azure AI vectorizer.
-
-        Args:
-            endpoint: Azure AI inference endpoint (models endpoint).
-            deployment: Embedding model deployment name.
-        """
-        from azure.ai.inference import EmbeddingsClient
-        from azure.identity import DefaultAzureCredential
-
-        self._deployment = deployment
-        self._credential = DefaultAzureCredential()
-        self._client = EmbeddingsClient(
-            endpoint=endpoint,
-            credential=self._credential,
-            credential_scopes=["https://cognitiveservices.azure.com/.default"],
-        )
-
-    def _embed_sync(self, text: str) -> list[float]:
-        """Synchronous embedding (internal)."""
-        from azure.ai.inference.models import EmbeddingInputType
-
-        response = self._client.embed(
-            input=[text],
-            model=self._deployment,
-            input_type=EmbeddingInputType.QUERY,
-        )
-        embedding = response.data[0].embedding
-        if not isinstance(embedding, list):
-            raise ValueError(f"Unexpected embedding type: {type(embedding)}")
-        return embedding
-
-    def embed(self, text: str) -> list[float]:
-        """Synchronously embed text into a vector."""
-        return self._embed_sync(text)
-
-    async def aembed(self, text: str) -> list[float]:
-        """Asynchronously embed text into a vector."""
-        return await asyncio.to_thread(self._embed_sync, text)
-
-    def close(self) -> None:
-        """Close the underlying credential and client."""
-        self._credential.close()
-
-
 async def demo_context_provider_graph_enriched() -> None:
     """Demo: Neo4j Context Provider with graph-enriched mode."""
+    from azure.identity import DefaultAzureCredential
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
     from logging_config import get_logger
     from neo4j_client import Neo4jSettings
-    from neo4j_provider import Neo4jContextProvider
+    from neo4j_provider import Neo4jContextProvider, AzureAIEmbedder
     from vector_search import VectorSearchConfig
 
     logger = get_logger()
@@ -150,17 +92,20 @@ async def demo_context_provider_graph_enriched() -> None:
     print("-" * 50 + "\n")
 
     credential = AzureCliCredential()
-    vectorizer = None
+    sync_credential = DefaultAzureCredential()
+    embedder = None
 
     try:
-        # Create vectorizer for Azure AI embeddings
-        vectorizer = AzureAIVectorizer(
+        # Create embedder for neo4j-graphrag (uses sync credential)
+        embedder = AzureAIEmbedder(
             endpoint=vector_config.inference_endpoint,
-            deployment=vector_config.embedding_deployment,
+            credential=sync_credential,
+            model=vector_config.embedding_deployment,
         )
-        print("Vectorizer initialized!\n")
+        print("Embedder initialized!\n")
 
         # Create context provider with graph-enriched mode
+        # Uses VectorCypherRetriever internally
         provider = Neo4jContextProvider(
             uri=neo4j_config.uri,
             username=neo4j_config.username,
@@ -169,7 +114,7 @@ async def demo_context_provider_graph_enriched() -> None:
             index_type="vector",
             mode="graph_enriched",
             retrieval_query=RETRIEVAL_QUERY,
-            vectorizer=vectorizer,
+            embedder=embedder,
             top_k=5,
             context_prompt=(
                 "## Graph-Enriched Knowledge Context\n"
@@ -223,15 +168,15 @@ async def demo_context_provider_graph_enriched() -> None:
 
     except ConnectionError as e:
         print(f"\nConnection Error: {e}")
-        print("Please check your Neo4j and Azure AI configuration.")
+        print("Please check your Neo4j and Microsoft Foundry configuration.")
     except Exception as e:
         logger.error(f"Error during demo: {e}")
         print(f"\nError: {e}")
         raise
     finally:
-        # Close vectorizer credential
-        if vectorizer is not None:
-            vectorizer.close()
+        # Close embedder credential
+        if embedder is not None:
+            embedder.close()
         await credential.close()
         # Allow pending async cleanup tasks to complete
         await asyncio.sleep(0.1)

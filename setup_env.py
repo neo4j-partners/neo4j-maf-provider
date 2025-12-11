@@ -20,6 +20,22 @@ AZD_MANAGED_VARS = {
     'SERVICE_API_ENDPOINTS',
 }
 
+# Variables that should NEVER be modified by this script (user-managed)
+PROTECTED_VARS = {
+    # Neo4j Connection (default)
+    'NEO4J_URI',
+    'NEO4J_USERNAME',
+    'NEO4J_PASSWORD',
+    'NEO4J_VECTOR_INDEX_NAME',
+    'NEO4J_FULLTEXT_INDEX_NAME',
+    # Neo4j Connection for Aircraft Domain
+    'AIRCRAFT_NEO4J_URI',
+    'AIRCRAFT_NEO4J_USERNAME',
+    'AIRCRAFT_NEO4J_PASSWORD',
+    'AIRCRAFT_NEO4J_VECTOR_INDEX_NAME',
+    'AIRCRAFT_NEO4J_FULLTEXT_INDEX_NAME',
+}
+
 ENV_FILE = Path('.env')
 SAMPLE_FILE = Path('.env.sample')
 
@@ -95,8 +111,11 @@ def main():
 
         azd_vars = parse_azd_output(result.stdout)
 
-        # Filter to only the variables we want to sync
-        azd_managed = {k: v for k, v in azd_vars.items() if k in AZD_MANAGED_VARS}
+        # Filter to only the variables we want to sync (exclude protected vars)
+        azd_managed = {
+            k: v for k, v in azd_vars.items()
+            if k in AZD_MANAGED_VARS and k not in PROTECTED_VARS
+        }
 
         if ENV_FILE.exists():
             # Read existing .env preserving structure
@@ -165,6 +184,15 @@ def main():
                 if len(value) > 50:
                     value = value[:47] + "..."
                 print(f"  {key}={value}")
+
+        # Show protected variables that were preserved
+        if ENV_FILE.exists():
+            existing_vars = parse_env_file(ENV_FILE)
+            preserved = [k for k in PROTECTED_VARS if k in existing_vars and existing_vars[k]]
+            if preserved:
+                print("\nProtected variables preserved (not modified):")
+                for key in sorted(preserved):
+                    print(f"  {key}=****")
 
         print("\nYou can now run the application:")
         print("  uv run start-agent")

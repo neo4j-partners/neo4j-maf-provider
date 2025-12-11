@@ -1,5 +1,5 @@
 """
-API routes using Microsoft Agent Framework with Azure AI Foundry.
+API routes using Microsoft Agent Framework with Microsoft Foundry.
 
 Provides REST endpoints for agent status, chat functionality, and semantic search.
 """

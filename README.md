@@ -19,7 +19,7 @@ For detailed architecture, configuration options, and sample walkthroughs, see *
 
 ### 1. Provision Azure Infrastructure
 
-Deploy Azure AI Foundry resources (for embeddings and chat models):
+Deploy Microsoft Foundry resources (for embeddings and chat models):
 
 ```bash
 azd up
@@ -72,7 +72,7 @@ The `src/samples/` directory contains working examples. Run them using `uv run s
 | 1 | `agent_memory.py` | Agent Framework conversation memory using threads |
 | 2 | `semantic_search.py` | Direct vector search without Agent Framework |
 | 3 | `context_provider_basic.py` | Fulltext (keyword) search |
-| 4 | `context_provider_vector.py` | Vector search with Azure AI embeddings |
+| 4 | `context_provider_vector.py` | Vector search with Microsoft Foundry embeddings |
 | 5 | `context_provider_graph_enriched.py` | Graph traversal for rich context |
 | 6 | `aircraft_maintenance_search.py` | Aircraft domain with custom retrieval queries |
 | 7 | `aircraft_flight_delays.py` | Flight operations data analysis |
