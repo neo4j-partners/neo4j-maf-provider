@@ -21,10 +21,11 @@ from neo4j_graphrag.retrievers import (
     HybridRetriever,
     HybridCypherRetriever,
 )
-from neo4j_graphrag.types import RetrieverResult
+from neo4j_graphrag.types import RetrieverResult, RetrieverResultItem
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
-from neo4j_client import Neo4jSettings
 from neo4j_provider.fulltext import FulltextRetriever
+from neo4j_provider.settings import Neo4jSettings
 
 if sys.version_info >= (3, 11):
     from typing import Self
@@ -34,6 +35,104 @@ else:
 
 # Type alias for all supported retrievers
 RetrieverType = VectorRetriever | VectorCypherRetriever | HybridRetriever | HybridCypherRetriever | FulltextRetriever
+
+# Type aliases for Literal types
+IndexType = Literal["vector", "fulltext", "hybrid"]
+SearchMode = Literal["basic", "graph_enriched"]
+
+
+def _format_cypher_result(record: neo4j.Record) -> RetrieverResultItem:
+    """
+    Format a neo4j Record from a Cypher retrieval query into a RetrieverResultItem.
+
+    Extracts 'text' as content and all other fields as metadata.
+    This provides proper parsing of custom retrieval query results.
+    """
+    data = dict(record)
+    # Extract text content (use 'text' field or first string field)
+    content = data.pop("text", None)
+    if content is None:
+        # Fallback: use first string value found
+        for key, value in data.items():
+            if isinstance(value, str):
+                content = value
+                break
+    if content is None:
+        content = str(record)
+
+    # All remaining fields go to metadata
+    return RetrieverResultItem(content=str(content), metadata=data if data else None)
+
+
+class ProviderConfig(BaseModel):
+    """
+    Pydantic model for Neo4jContextProvider configuration validation.
+
+    Validates all configuration parameters and their interdependencies.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    # Connection settings
+    uri: str | None = None
+    username: str | None = None
+    password: str | None = None
+
+    # Index configuration
+    index_name: str
+    index_type: IndexType = "vector"
+    fulltext_index_name: str | None = None
+
+    # Mode and retrieval
+    mode: SearchMode = "basic"
+    retrieval_query: str | None = None
+
+    # Search parameters
+    top_k: int = 5
+    context_prompt: str | None = None
+    message_history_count: int = 10
+    filter_stop_words: bool | None = None
+
+    # Embedder (validated separately due to complex type)
+    embedder: Embedder | None = None
+
+    @field_validator("top_k")
+    @classmethod
+    def top_k_must_be_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("top_k must be at least 1")
+        return v
+
+    @field_validator("message_history_count")
+    @classmethod
+    def message_history_must_be_positive(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("message_history_count must be at least 1")
+        return v
+
+    @model_validator(mode="after")
+    def validate_config(self) -> Self:
+        """Validate interdependent configuration options."""
+        # Hybrid search requires fulltext index
+        if self.index_type == "hybrid" and not self.fulltext_index_name:
+            raise ValueError(
+                "fulltext_index_name is required when index_type='hybrid'"
+            )
+
+        # Graph-enriched mode requires retrieval query
+        if self.mode == "graph_enriched" and not self.retrieval_query:
+            raise ValueError(
+                "retrieval_query is required when mode='graph_enriched'. "
+                "Provide a Cypher query that uses `node` and `score` from index search."
+            )
+
+        # Vector/hybrid search requires embedder
+        if self.index_type in ("vector", "hybrid") and self.embedder is None:
+            raise ValueError(
+                f"embedder is required when index_type='{self.index_type}'"
+            )
+
+        return self
 
 
 class Neo4jContextProvider(ContextProvider):
@@ -66,11 +165,11 @@ class Neo4jContextProvider(ContextProvider):
         password: str | None = None,
         # Index configuration (required)
         index_name: str | None = None,
-        index_type: Literal["vector", "fulltext", "hybrid"] = "vector",
+        index_type: IndexType = "vector",
         # For hybrid search - optional second index
         fulltext_index_name: str | None = None,
         # Mode selection
-        mode: Literal["basic", "graph_enriched"] = "basic",
+        mode: SearchMode = "basic",
         # Search parameters
         top_k: int = 5,
         context_prompt: str | None = None,
@@ -108,62 +207,61 @@ class Neo4jContextProvider(ContextProvider):
             message_history_count: Number of recent messages to use for query.
             filter_stop_words: Filter common stop words from fulltext queries.
                 Defaults to True for fulltext indexes, False otherwise.
+
+        Raises:
+            ValueError: If required configuration is missing or invalid.
         """
         # Load settings from environment (single source of truth)
         settings = Neo4jSettings()
 
         # Build effective settings by merging constructor args with env settings
-        self._uri = uri or settings.uri
-        self._username = username or settings.username
-        self._password = password or settings.get_password()
+        effective_uri = uri or settings.uri
+        effective_username = username or settings.username
+        effective_password = password or settings.get_password()
+        effective_index_name = index_name or settings.index_name
 
-        # Index configuration
-        self._index_name = index_name or settings.index_name
-        self._index_type: Literal["vector", "fulltext", "hybrid"] = index_type
-        self._fulltext_index_name = fulltext_index_name
-
-        # Validate index_name is provided
-        if not self._index_name:
+        # Validate index_name is provided (before Pydantic validation)
+        if not effective_index_name:
             raise ValueError(
                 "index_name is required. Set via constructor or NEO4J_INDEX_NAME env var."
             )
 
-        # Validate hybrid search has fulltext index
-        if self._index_type == "hybrid" and not self._fulltext_index_name:
-            raise ValueError(
-                "fulltext_index_name is required when index_type='hybrid'."
-            )
+        # Use Pydantic model for comprehensive validation
+        config = ProviderConfig(
+            uri=effective_uri,
+            username=effective_username,
+            password=effective_password,
+            index_name=effective_index_name,
+            index_type=index_type,
+            fulltext_index_name=fulltext_index_name,
+            mode=mode,
+            retrieval_query=retrieval_query,
+            top_k=top_k,
+            context_prompt=context_prompt,
+            message_history_count=message_history_count,
+            filter_stop_words=filter_stop_words,
+            embedder=embedder,
+        )
 
-        # Mode and retrieval query
-        self._mode: Literal["basic", "graph_enriched"] = mode
-        self._retrieval_query = retrieval_query
-
-        # Validate retrieval_query for graph_enriched mode
-        if self._mode == "graph_enriched" and retrieval_query is None:
-            raise ValueError(
-                "retrieval_query is required when mode='graph_enriched'. "
-                "Provide a Cypher query that uses `node` and `score` from index search."
-            )
-
-        # Search parameters
-        self._top_k = top_k
-        self._context_prompt = context_prompt or self.DEFAULT_CONTEXT_PROMPT
-        self._message_history_count = message_history_count
-
-        # Embedder for vector/hybrid search
-        self._embedder = embedder
-
-        # Validate embedder for vector/hybrid search
-        if self._index_type in ("vector", "hybrid") and embedder is None:
-            raise ValueError(
-                f"embedder is required when index_type='{self._index_type}'"
-            )
+        # Store validated configuration
+        self._uri = config.uri
+        self._username = config.username
+        self._password = config.password
+        self._index_name = config.index_name
+        self._index_type = config.index_type
+        self._fulltext_index_name = config.fulltext_index_name
+        self._mode = config.mode
+        self._retrieval_query = config.retrieval_query
+        self._top_k = config.top_k
+        self._context_prompt = config.context_prompt or self.DEFAULT_CONTEXT_PROMPT
+        self._message_history_count = config.message_history_count
+        self._embedder = config.embedder
 
         # Stop word filtering - default to True for fulltext, False otherwise
-        if filter_stop_words is None:
+        if config.filter_stop_words is None:
             self._filter_stop_words = self._index_type == "fulltext"
         else:
-            self._filter_stop_words = filter_stop_words
+            self._filter_stop_words = config.filter_stop_words
 
         # Runtime state
         self._driver: neo4j.Driver | None = None
@@ -181,6 +279,7 @@ class Neo4jContextProvider(ContextProvider):
                     index_name=self._index_name,
                     retrieval_query=self._retrieval_query,
                     embedder=self._embedder,
+                    result_formatter=_format_cypher_result,
                 )
             else:
                 return VectorRetriever(
@@ -197,6 +296,7 @@ class Neo4jContextProvider(ContextProvider):
                     fulltext_index_name=self._fulltext_index_name,
                     retrieval_query=self._retrieval_query,
                     embedder=self._embedder,
+                    result_formatter=_format_cypher_result,
                 )
             else:
                 return HybridRetriever(

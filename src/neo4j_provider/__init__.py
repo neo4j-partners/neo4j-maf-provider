@@ -6,37 +6,40 @@ with knowledge graph data from Neo4j using vector, fulltext, or hybrid search
 via neo4j-graphrag retrievers.
 
 Usage:
-    from neo4j_provider import Neo4jContextProvider, AzureAIEmbedder
-    from neo4j_client import Neo4jSettings
+    from neo4j_provider import Neo4jContextProvider, AzureAIEmbedder, Neo4jSettings, AzureAISettings
     from azure.identity import DefaultAzureCredential
+
+    # Load settings from environment
+    neo4j_settings = Neo4jSettings()
+    azure_settings = AzureAISettings()
 
     # Create embedder for vector search
     embedder = AzureAIEmbedder(
-        endpoint="https://your-project.models.ai.azure.com",
+        endpoint=azure_settings.inference_endpoint,
         credential=DefaultAzureCredential(),
+        model=azure_settings.embedding_model,
     )
 
     # Create provider with vector search
     provider = Neo4jContextProvider(
-        index_name="chunkEmbeddings",
+        uri=neo4j_settings.uri,
+        username=neo4j_settings.username,
+        password=neo4j_settings.get_password(),
+        index_name=neo4j_settings.vector_index_name,
         index_type="vector",
         embedder=embedder,
     )
 """
 
-from neo4j_client import Neo4jSettings
-
 from .embedder import AzureAIEmbedder
 from .fulltext import FulltextRetriever
 from .provider import Neo4jContextProvider
-
-# Backwards compatibility alias
-Neo4jContextProviderSettings = Neo4jSettings
+from .settings import AzureAISettings, Neo4jSettings
 
 __all__ = [
     "Neo4jContextProvider",
-    "Neo4jContextProviderSettings",  # Alias for backwards compatibility
     "Neo4jSettings",
+    "AzureAISettings",
     "AzureAIEmbedder",
     "FulltextRetriever",
 ]

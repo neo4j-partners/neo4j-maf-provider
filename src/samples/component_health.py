@@ -12,23 +12,20 @@ from __future__ import annotations
 import asyncio
 import os
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
 # Graph-enriched retrieval query for component health
 # Traverses: Component <- System <- Aircraft, Component -> MaintenanceEvent
 # Simplified to minimize context size
+# Note: Uses explicit grouping and null-safe sorting per Cypher best practices
 COMPONENT_RETRIEVAL_QUERY = """
 MATCH (node)<-[:HAS_COMPONENT]-(sys:System)<-[:HAS_SYSTEM]-(aircraft:Aircraft)
 OPTIONAL MATCH (node)-[:HAS_EVENT]->(event:MaintenanceEvent)
 WITH node, score, aircraft, sys,
      count(event) AS event_count,
      collect(event.severity)[0] AS last_severity
+WHERE score IS NOT NULL
 RETURN
     node.name AS component,
     node.type AS type,
@@ -45,8 +42,8 @@ async def demo_component_health() -> None:
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
-    from logging_config import get_logger
     from neo4j_provider import Neo4jContextProvider
+    from utils import get_logger
 
     logger = get_logger()
 

@@ -7,12 +7,7 @@ knowledge graph data using fulltext search.
 
 from __future__ import annotations
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
 async def demo_context_provider_basic() -> None:
@@ -20,10 +15,8 @@ async def demo_context_provider_basic() -> None:
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
-    from logging_config import get_logger
-    from neo4j_client import Neo4jSettings
-    from neo4j_provider import Neo4jContextProvider
-    from vector_search import VectorSearchConfig
+    from neo4j_provider import Neo4jContextProvider, Neo4jSettings
+    from utils import get_logger
 
     logger = get_logger()
 
@@ -33,32 +26,31 @@ async def demo_context_provider_basic() -> None:
 
     # Load configs
     agent_config = AgentConfig()
-    neo4j_config = Neo4jSettings()
-    search_config = VectorSearchConfig()
+    neo4j_settings = Neo4jSettings()
 
     if not agent_config.project_endpoint:
         print("Error: AZURE_AI_PROJECT_ENDPOINT not configured.")
         return
 
-    if not neo4j_config.is_configured:
+    if not neo4j_settings.is_configured:
         print("Error: Neo4j not configured.")
         print("Required: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD")
         return
 
     print(f"Agent: {agent_config.name}")
     print(f"Model: {agent_config.model}")
-    print(f"Neo4j URI: {neo4j_config.uri}")
-    print(f"Fulltext Index: {search_config.fulltext_index_name}\n")
+    print(f"Neo4j URI: {neo4j_settings.uri}")
+    print(f"Fulltext Index: {neo4j_settings.fulltext_index_name}\n")
 
     credential = AzureCliCredential()
 
     try:
         # Create context provider with fulltext search
         provider = Neo4jContextProvider(
-            uri=neo4j_config.uri,
-            username=neo4j_config.username,
-            password=neo4j_config.get_password(),
-            index_name=search_config.fulltext_index_name,
+            uri=neo4j_settings.uri,
+            username=neo4j_settings.username,
+            password=neo4j_settings.get_password(),
+            index_name=neo4j_settings.fulltext_index_name,
             index_type="fulltext",
             top_k=3,
             context_prompt=(

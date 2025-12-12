@@ -9,12 +9,7 @@ from __future__ import annotations
 
 import asyncio
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
 async def demo_context_provider_vector() -> None:
@@ -23,10 +18,13 @@ async def demo_context_provider_vector() -> None:
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
-    from logging_config import get_logger
-    from neo4j_client import Neo4jSettings
-    from neo4j_provider import Neo4jContextProvider, AzureAIEmbedder
-    from vector_search import VectorSearchConfig
+    from neo4j_provider import (
+        Neo4jContextProvider,
+        Neo4jSettings,
+        AzureAISettings,
+        AzureAIEmbedder,
+    )
+    from utils import get_logger
 
     logger = get_logger()
 
@@ -36,28 +34,28 @@ async def demo_context_provider_vector() -> None:
 
     # Load configs
     agent_config = AgentConfig()
-    neo4j_config = Neo4jSettings()
-    vector_config = VectorSearchConfig()
+    neo4j_settings = Neo4jSettings()
+    azure_settings = AzureAISettings()
 
     if not agent_config.project_endpoint:
         print("Error: AZURE_AI_PROJECT_ENDPOINT not configured.")
         return
 
-    if not neo4j_config.is_configured:
+    if not neo4j_settings.is_configured:
         print("Error: Neo4j not configured.")
         print("Required: NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD")
         return
 
-    if not vector_config.is_configured:
-        print("Error: Vector search not configured.")
+    if not azure_settings.is_configured:
+        print("Error: Azure AI not configured.")
         print("Required: AZURE_AI_PROJECT_ENDPOINT")
         return
 
     print(f"Agent: {agent_config.name}")
     print(f"Model: {agent_config.model}")
-    print(f"Neo4j URI: {neo4j_config.uri}")
-    print(f"Vector Index: {vector_config.vector_index_name}")
-    print(f"Embedding Model: {vector_config.embedding_deployment}\n")
+    print(f"Neo4j URI: {neo4j_settings.uri}")
+    print(f"Vector Index: {neo4j_settings.vector_index_name}")
+    print(f"Embedding Model: {azure_settings.embedding_model}\n")
 
     credential = AzureCliCredential()
     sync_credential = DefaultAzureCredential()
@@ -66,18 +64,18 @@ async def demo_context_provider_vector() -> None:
     try:
         # Create embedder for neo4j-graphrag (uses sync credential)
         embedder = AzureAIEmbedder(
-            endpoint=vector_config.inference_endpoint,
+            endpoint=azure_settings.inference_endpoint,
             credential=sync_credential,
-            model=vector_config.embedding_deployment,
+            model=azure_settings.embedding_model,
         )
         print("Embedder initialized!\n")
 
         # Create context provider with vector search
         provider = Neo4jContextProvider(
-            uri=neo4j_config.uri,
-            username=neo4j_config.username,
-            password=neo4j_config.get_password(),
-            index_name=vector_config.vector_index_name,
+            uri=neo4j_settings.uri,
+            username=neo4j_settings.username,
+            password=neo4j_settings.get_password(),
+            index_name=neo4j_settings.vector_index_name,
             index_type="vector",
             embedder=embedder,
             top_k=5,

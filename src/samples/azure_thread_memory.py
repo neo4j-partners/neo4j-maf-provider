@@ -1,31 +1,27 @@
 """
-Demo: Agent memory across conversation turns.
+Demo: Azure thread-based conversation memory.
 
 This sample demonstrates how the Microsoft Agent Framework maintains
-conversation context using threads.
+conversation context using Azure-managed threads (not Neo4j).
 """
 
 from __future__ import annotations
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
-async def demo_agent_memory() -> None:
-    """Demo: Agent memory across conversation turns."""
+async def demo_azure_thread_memory() -> None:
+    """Demo: Azure thread-based conversation memory."""
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client, create_agent_context
-    from logging_config import get_logger
+    from utils import get_logger
 
     logger = get_logger()
 
-    print_header("Demo: Agent Memory")
-    print("This demo shows how the agent maintains conversation context.\n")
+    print_header("Demo: Azure Thread Memory")
+    print("This demo shows how Azure threads maintain conversation context.\n")
+    print("Note: This uses Azure's built-in thread memory, not Neo4j.\n")
 
     config = AgentConfig()
 

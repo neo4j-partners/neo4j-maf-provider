@@ -2,36 +2,53 @@
 Demo: Semantic search over Neo4j graph database.
 
 This sample demonstrates semantic search with graph-aware context retrieval
-using Microsoft Foundry embeddings and Neo4j vector indexes.
+using the Neo4jContextProvider with vector search mode.
 """
 
 from __future__ import annotations
 
 import asyncio
 
+from ._utils import print_header
 
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+
+# Retrieval query for graph-enriched search results
+# Note: Uses explicit grouping and null-safe sorting per Cypher best practices
+RETRIEVAL_QUERY = """
+MATCH (node)-[:FROM_DOCUMENT]->(doc:Document)<-[:FILED]-(company:Company)
+OPTIONAL MATCH (company)-[:FACES_RISK]->(risk:RiskFactor)
+WITH node, score, company, collect(DISTINCT risk.name) AS risks
+WHERE score IS NOT NULL
+RETURN
+    node.text AS text,
+    score,
+    company.name AS company,
+    risks
+ORDER BY score DESC
+"""
 
 
 async def demo_semantic_search() -> None:
     """Demo: Semantic search over Neo4j graph database."""
-    from logging_config import get_logger
-    from neo4j_client import Neo4jClient, Neo4jSettings
-    from vector_search import VectorSearchClient, VectorSearchConfig
+    from azure.identity import DefaultAzureCredential
+
+    from neo4j_provider import (
+        Neo4jContextProvider,
+        Neo4jSettings,
+        AzureAISettings,
+        AzureAIEmbedder,
+    )
+    from utils import get_logger
 
     logger = get_logger()
 
     print_header("Demo: Semantic Search")
     print("This demo shows semantic search with graph-aware context retrieval.\n")
 
-    neo4j_config = Neo4jSettings()
-    vector_config = VectorSearchConfig()
+    neo4j_settings = Neo4jSettings()
+    azure_settings = AzureAISettings()
 
-    if not neo4j_config.is_configured:
+    if not neo4j_settings.is_configured:
         print("Error: Neo4j not configured.")
         print("Required environment variables:")
         print("  - NEO4J_URI")
@@ -39,62 +56,80 @@ async def demo_semantic_search() -> None:
         print("  - NEO4J_PASSWORD")
         return
 
-    if not vector_config.is_configured:
-        print("Error: Vector search not configured.")
+    if not azure_settings.is_configured:
+        print("Error: Azure AI not configured.")
         print("Required environment variables:")
         print("  - AZURE_AI_PROJECT_ENDPOINT")
         return
 
-    print(f"Neo4j URI: {neo4j_config.uri}")
-    print(f"Vector Index: {vector_config.vector_index_name}")
-    print(f"Embedding Model: {vector_config.embedding_deployment}\n")
+    print(f"Neo4j URI: {neo4j_settings.uri}")
+    print(f"Vector Index: {neo4j_settings.vector_index_name}")
+    print(f"Embedding Model: {azure_settings.embedding_model}\n")
 
-    neo4j_client = None
+    sync_credential = DefaultAzureCredential()
+    embedder = None
+
     try:
-        neo4j_client = Neo4jClient(neo4j_config)
-        await neo4j_client.connect()
-        print("Connected to Neo4j!\n")
+        # Create embedder for neo4j-graphrag
+        embedder = AzureAIEmbedder(
+            endpoint=azure_settings.inference_endpoint,
+            credential=sync_credential,
+            model=azure_settings.embedding_model,
+        )
+        print("Embedder initialized!\n")
 
-        # Get schema
-        schema = await neo4j_client.get_schema()
-        print(f"Graph Schema: {schema.summary()}")
-        print(f"  Node labels: {', '.join(schema.node_labels[:5])}...")
-        print(f"  Relationships: {', '.join(schema.relationship_types[:5])}...\n")
+        # Create context provider with vector search and graph enrichment
+        provider = Neo4jContextProvider(
+            uri=neo4j_settings.uri,
+            username=neo4j_settings.username,
+            password=neo4j_settings.get_password(),
+            index_name=neo4j_settings.vector_index_name,
+            index_type="vector",
+            mode="graph_enriched",
+            retrieval_query=RETRIEVAL_QUERY,
+            embedder=embedder,
+            top_k=3,
+        )
 
-        # Create vector search client
-        vector_client = VectorSearchClient(vector_config, neo4j_client)
-        print("Vector search client initialized!\n")
-        print("-" * 50)
-
-        # Demo queries
-        queries = [
-            "What products does Microsoft offer?",
-            "What are the risk factors for technology companies?",
-            "Tell me about financial metrics and revenue",
-        ]
-
-        for i, query in enumerate(queries, 1):
-            print(f"\n[Query {i}] {query}\n")
-            results = await vector_client.search(query, top_k=3)
-
-            if not results:
-                print("  No results found.\n")
-                continue
-
-            for j, result in enumerate(results, 1):
-                print(f"  Result {j} (score: {result.score:.3f}):")
-                print(f"    Company: {result.metadata.company or 'N/A'}")
-                text_preview = result.text[:150].replace("\n", " ")
-                print(f"    Text: {text_preview}...")
-                if result.metadata.risks:
-                    print(f"    Related Risks: {', '.join(result.metadata.risks[:3])}")
-                print()
-
+        async with provider:
+            print("Connected to Neo4j!\n")
             print("-" * 50)
 
-        print(
-            "\nDemo complete! Semantic search successfully retrieved graph-enriched results."
-        )
+            # Demo queries
+            queries = [
+                "What products does Microsoft offer?",
+                "What are the risk factors for technology companies?",
+                "Tell me about financial metrics and revenue",
+            ]
+
+            for i, query in enumerate(queries, 1):
+                print(f"\n[Query {i}] {query}\n")
+
+                # Perform search using the provider's internal retriever
+                result = await provider._search(query)
+
+                if not result.items:
+                    print("  No results found.\n")
+                    continue
+
+                for j, item in enumerate(result.items, 1):
+                    score = item.metadata.get("score", 0.0) if item.metadata else 0.0
+                    company = item.metadata.get("company", "N/A") if item.metadata else "N/A"
+                    risks = item.metadata.get("risks", []) if item.metadata else []
+
+                    print(f"  Result {j} (score: {score:.3f}):")
+                    print(f"    Company: {company}")
+                    text_preview = str(item.content)[:150].replace("\n", " ")
+                    print(f"    Text: {text_preview}...")
+                    if risks:
+                        print(f"    Related Risks: {', '.join(risks[:3])}")
+                    print()
+
+                print("-" * 50)
+
+            print(
+                "\nDemo complete! Semantic search successfully retrieved graph-enriched results."
+            )
 
     except ConnectionError as e:
         print(f"\nConnection Error: {e}")
@@ -104,7 +139,7 @@ async def demo_semantic_search() -> None:
         print(f"\nError: {e}")
         raise
     finally:
-        if neo4j_client:
-            await neo4j_client.close()
-            # Allow pending async cleanup tasks to complete
-            await asyncio.sleep(0.1)
+        if embedder is not None:
+            embedder.close()
+        # Allow pending async cleanup tasks to complete
+        await asyncio.sleep(0.1)

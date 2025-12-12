@@ -11,32 +11,45 @@ import sys
 
 from dotenv import load_dotenv
 
+from collections.abc import Awaitable, Callable
+
 from samples import (
-    demo_agent_memory,
     demo_aircraft_flight_delays,
     demo_aircraft_maintenance_search,
+    demo_azure_thread_memory,
     demo_component_health,
     demo_context_provider_basic,
     demo_context_provider_graph_enriched,
     demo_context_provider_vector,
     demo_semantic_search,
 )
-from util import get_env_file_path
+from samples._utils import print_header
+from utils import get_env_file_path
 
+# Demo function type
+DemoFunc = Callable[[], Awaitable[None]]
 
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+# Map demo choices to their functions
+DEMOS: dict[str, DemoFunc] = {
+    "1": demo_azure_thread_memory,
+    "2": demo_semantic_search,
+    "3": demo_context_provider_basic,
+    "4": demo_context_provider_vector,
+    "5": demo_context_provider_graph_enriched,
+    "6": demo_aircraft_maintenance_search,
+    "7": demo_aircraft_flight_delays,
+    "8": demo_component_health,
+}
 
 
 def print_menu() -> str | None:
     """Display menu and get user selection."""
     print_header("Neo4j MAF Provider Demo")
     print("Select a demo to run:\n")
+    print("  -- Azure Agent Framework --")
+    print("  1. Azure Thread Memory (no Neo4j)")
+    print("")
     print("  -- Financial Documents Database --")
-    print("  1. Agent Memory")
     print("  2. Semantic Search")
     print("  3. Context Provider (Fulltext)")
     print("  4. Context Provider (Vector)")
@@ -64,38 +77,15 @@ def print_menu() -> str | None:
 
 async def run_demo(choice: str) -> None:
     """Run the selected demo."""
-    if choice == "1":
-        await demo_agent_memory()
-    elif choice == "2":
-        await demo_semantic_search()
-    elif choice == "3":
-        await demo_context_provider_basic()
-    elif choice == "4":
-        await demo_context_provider_vector()
-    elif choice == "5":
-        await demo_context_provider_graph_enriched()
-    elif choice == "6":
-        await demo_aircraft_maintenance_search()
-    elif choice == "7":
-        await demo_aircraft_flight_delays()
-    elif choice == "8":
-        await demo_component_health()
-    elif choice == "A":
-        await demo_agent_memory()
-        print("\n" + "=" * 60 + "\n")
-        await demo_semantic_search()
-        print("\n" + "=" * 60 + "\n")
-        await demo_context_provider_basic()
-        print("\n" + "=" * 60 + "\n")
-        await demo_context_provider_vector()
-        print("\n" + "=" * 60 + "\n")
-        await demo_context_provider_graph_enriched()
-        print("\n" + "=" * 60 + "\n")
-        await demo_aircraft_maintenance_search()
-        print("\n" + "=" * 60 + "\n")
-        await demo_aircraft_flight_delays()
-        print("\n" + "=" * 60 + "\n")
-        await demo_component_health()
+    if choice == "A":
+        # Run all demos sequentially
+        demo_list = list(DEMOS.values())
+        for i, demo_func in enumerate(demo_list):
+            await demo_func()
+            if i < len(demo_list) - 1:
+                print("\n" + "=" * 60 + "\n")
+    elif choice in DEMOS:
+        await DEMOS[choice]()
 
 
 def main() -> None:
@@ -106,7 +96,7 @@ def main() -> None:
         epilog="""
 Examples:
   uv run start-agent        Interactive menu
-  uv run start-agent 1      Run demo 1 (Agent Memory)
+  uv run start-agent 1      Run demo 1 (Azure Thread Memory)
   uv run start-agent 2      Run demo 2 (Semantic Search)
   uv run start-agent 3      Run demo 3 (Context Provider - Fulltext)
   uv run start-agent 4      Run demo 4 (Context Provider - Vector)

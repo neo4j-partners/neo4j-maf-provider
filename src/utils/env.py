@@ -23,9 +23,10 @@ def get_env_file_path() -> str | None:
     if os.getenv("RUNNING_IN_PRODUCTION"):
         return None
 
-    # Get project root (one level up from src/)
+    # Get project root (two levels up from utils/)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)
+    src_dir = os.path.dirname(current_dir)
+    project_root = os.path.dirname(src_dir)
 
     # Check for .env in project root
     root_env = os.path.join(project_root, '.env')

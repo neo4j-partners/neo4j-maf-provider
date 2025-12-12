@@ -12,18 +12,15 @@ from __future__ import annotations
 import asyncio
 import os
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
 # Graph-enriched retrieval query for maintenance events
 # Traverses: MaintenanceEvent <- Component <- System <- Aircraft
+# Note: Uses null-safe sorting per Cypher best practices
 MAINTENANCE_RETRIEVAL_QUERY = """
 MATCH (node)<-[:HAS_EVENT]-(comp:Component)<-[:HAS_COMPONENT]-(sys:System)<-[:HAS_SYSTEM]-(aircraft:Aircraft)
+WHERE score IS NOT NULL
 RETURN
     node.fault AS fault,
     node.corrective_action AS corrective_action,
@@ -43,8 +40,8 @@ async def demo_aircraft_maintenance_search() -> None:
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
-    from logging_config import get_logger
     from neo4j_provider import Neo4jContextProvider
+    from utils import get_logger
 
     logger = get_logger()
 

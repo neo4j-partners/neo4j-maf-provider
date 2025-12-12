@@ -12,23 +12,18 @@ from __future__ import annotations
 import asyncio
 import os
 
-
-def print_header(title: str) -> None:
-    """Print a formatted header."""
-    print("\n" + "=" * 60)
-    print(f"  {title}")
-    print("=" * 60 + "\n")
+from ._utils import print_header
 
 
 # Graph-enriched retrieval query for flight delays
 # Traverses: Delay <- Flight -> Aircraft, Origin Airport, Destination Airport
 # Simplified output to minimize context size
-# Filter NULL minutes to ensure consistent sorting (Cypher best practice)
+# Note: Uses null-safe sorting per Cypher best practices
 DELAY_RETRIEVAL_QUERY = """
 MATCH (node)<-[:HAS_DELAY]-(flight:Flight)-[:OPERATES_FLIGHT]-(aircraft:Aircraft)
-WHERE node.minutes IS NOT NULL
 MATCH (flight)-[:DEPARTS_FROM]->(origin:Airport)
 MATCH (flight)-[:ARRIVES_AT]->(dest:Airport)
+WHERE score IS NOT NULL AND node.minutes IS NOT NULL
 RETURN
     node.cause AS cause,
     node.minutes AS minutes,
@@ -44,8 +39,8 @@ async def demo_aircraft_flight_delays() -> None:
     from azure.identity.aio import AzureCliCredential
 
     from agent import AgentConfig, create_agent_client
-    from logging_config import get_logger
     from neo4j_provider import Neo4jContextProvider
+    from utils import get_logger
 
     logger = get_logger()
 

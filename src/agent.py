@@ -11,7 +11,7 @@ from azure.identity.aio import AzureCliCredential
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from logging_config import get_logger
+from utils import get_logger
 
 logger = get_logger()
 
@@ -74,7 +74,7 @@ def create_agent_client(config: AgentConfig, credential: AzureCliCredential) -> 
     return AzureAIClient(**client_kwargs)
 
 
-def create_agent_context(client: AzureAIClient, config: AgentConfig):
+def create_agent_context(client: AzureAIClient, config: AgentConfig):  # type: ignore[return]
     """
     Create an agent context manager from the client.
 
@@ -83,7 +83,7 @@ def create_agent_context(client: AzureAIClient, config: AgentConfig):
         config: Agent configuration with name and instructions.
 
     Returns:
-        Async context manager that yields the agent.
+        Async context manager that yields the agent (AsyncContextManager[ChatAgent]).
     """
     logger.info(f"Creating agent '{config.name}' with model '{config.model}'...")
     return client.create_agent(

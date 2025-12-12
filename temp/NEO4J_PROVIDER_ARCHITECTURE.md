@@ -7,6 +7,7 @@
 - [How the Provider Works](#how-the-provider-works)
 - [Sample Walkthroughs](#sample-walkthroughs)
 - [Configuration Reference](#configuration-reference)
+- [Implemented Features](#implemented-features)
 - [Future Work](#future-work)
 - [Summary](#summary)
 
@@ -88,9 +89,20 @@ The Neo4j Context Provider is designed to follow the same patterns as the Micros
 
 3. **Configurable enrichment**: For graph-aware retrieval, you provide a custom Cypher query that traverses the graph after the initial search. This keeps the provider generic while enabling powerful graph context.
 
+### Integration with neo4j-graphrag
+
+The provider uses the official `neo4j-graphrag` Python library for all retrieval operations. This library provides well-tested, maintained retrievers that handle the complexity of vector search, fulltext search, and hybrid search. The provider acts as an adapter between the Microsoft Agent Framework's `ContextProvider` interface and neo4j-graphrag's retrievers.
+
+**Retrievers used:**
+- `VectorRetriever` — For basic vector search
+- `VectorCypherRetriever` — For vector search with graph enrichment
+- `HybridRetriever` — For combined vector + fulltext search
+- `HybridCypherRetriever` — For hybrid search with graph enrichment
+- `FulltextRetriever` — Custom implementation for fulltext-only search (with optional graph enrichment)
+
 ### Architecture Overview
 
-The provider supports two search types (vector and fulltext) and two result modes (basic and graph-enriched). The following diagram shows the complete data flow from when the agent receives a message to when context is returned:
+The provider supports three search types (vector, fulltext, and hybrid) and two result modes (basic and graph-enriched). The following diagram shows the complete data flow from when the agent receives a message to when context is returned:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -148,10 +160,11 @@ The provider supports two search types (vector and fulltext) and two result mode
 
 ### Search Types
 
-| Search Type | Neo4j Feature | Best For |
-|-------------|---------------|----------|
-| **Vector** | `db.index.vector.queryNodes()` | Semantic similarity—finds conceptually related content even if exact words differ |
-| **Fulltext** | `db.index.fulltext.queryNodes()` | Keyword matching—finds content containing specific terms |
+| Search Type | neo4j-graphrag Retriever | Best For |
+|-------------|--------------------------|----------|
+| **Vector** | `VectorRetriever` / `VectorCypherRetriever` | Semantic similarity—finds conceptually related content even if exact words differ |
+| **Fulltext** | `FulltextRetriever` | Keyword matching—finds content containing specific terms |
+| **Hybrid** | `HybridRetriever` / `HybridCypherRetriever` | Best of both—combines semantic understanding with keyword precision |
 
 ### Result Modes
 
@@ -284,12 +297,19 @@ This ensures efficient connection reuse and proper cleanup even if errors occur.
 
 The implementation is spread across a few files, each with a specific responsibility:
 
-| Component | Responsibility |
-|-----------|----------------|
-| **Neo4jContextProvider** | The main class that implements the Agent Framework's context provider interface. Handles message processing, search execution, and result formatting. |
-| **VectorizerProtocol** | Defines what a vectorizer must do (convert text to vectors). You can use Microsoft Foundry embeddings, OpenAI, or any compatible embedding service. |
-| **Neo4jClient** | Manages the database connection, executes Cypher queries, and handles errors. |
-| **Neo4jSettings** | Loads configuration from environment variables so you don't have to hardcode credentials. |
+| Component | File | Responsibility |
+|-----------|------|----------------|
+| **Neo4jContextProvider** | `neo4j_provider/provider.py` | The main class that implements the Agent Framework's context provider interface. Handles message processing, retriever selection, and result formatting. |
+| **ProviderConfig** | `neo4j_provider/provider.py` | Pydantic model for configuration validation with field validators and model validators for interdependent options. |
+| **AzureAIEmbedder** | `neo4j_provider/embedder.py` | neo4j-graphrag compatible embedder that uses Azure AI / Microsoft Foundry for text embeddings. |
+| **FulltextRetriever** | `neo4j_provider/fulltext.py` | Custom retriever for fulltext search (neo4j-graphrag doesn't include one). Supports optional graph enrichment via retrieval queries. |
+| **Neo4jSettings** | `neo4j_provider/settings.py` | Pydantic settings for Neo4j connection loaded from environment variables. |
+| **AzureAISettings** | `neo4j_provider/settings.py` | Pydantic settings for Azure AI embeddings configuration. |
+
+**External dependencies (neo4j-graphrag):**
+- `VectorRetriever`, `VectorCypherRetriever` — Vector search with optional graph traversal
+- `HybridRetriever`, `HybridCypherRetriever` — Combined vector + fulltext search
+- `Embedder` protocol — Interface that `AzureAIEmbedder` implements
 
 ### What Happens After the Response
 
@@ -307,7 +327,58 @@ This matches the pattern used by the Redis provider, which stores conversation m
 
 The `src/samples/` directory contains eight working examples demonstrating different capabilities. Each sample is a standalone async function that creates an agent with the Neo4j context provider. This section shows actual output from running each sample.
 
-### Sample 1: Basic Fulltext Search
+### Sample 1: Azure Thread Memory (No Neo4j)
+
+**File**: `azure_thread_memory.py`
+
+**What it demonstrates**: How the Microsoft Agent Framework maintains conversation context using Azure-managed threads. **Note**: This sample does NOT use Neo4j—it demonstrates the framework's built-in memory, not the Neo4j provider.
+
+**Sample output**:
+```
+[Turn 1] User: Hello! My name is Wayne and I love horses.
+[Turn 1] Agent: Hi Wayne! That's great to hear. Horses are amazing animals.
+
+[Turn 2] User: What is my name and what do I enjoy?
+[Turn 2] Agent: Your name is Wayne, and you enjoy horses.
+
+[Turn 3] User: Can you suggest recommendations for my passion?
+[Turn 3] Agent: Here are some recommendations for your passion for horses:
+1. Riding Lessons
+2. Equestrian Events
+3. Volunteering at a stable
+...
+```
+
+---
+
+### Sample 2: Semantic Search
+
+**File**: `semantic_search.py`
+
+**What it demonstrates**: Direct semantic search using `VectorCypherRetriever` with graph enrichment to show company names and risk factors alongside search results.
+
+**Configuration used**:
+- `index_type="vector"` — Uses Neo4j's vector index via `VectorCypherRetriever`
+- `mode="graph_enriched"` — Custom retrieval query traverses to Company and RiskFactor nodes
+- `embedder=AzureAIEmbedder(...)` — Microsoft Foundry embeddings
+
+**Sample output**:
+```
+[Query 1] What products does Microsoft offer?
+
+  Result 1 (score: 0.925):
+    Company: MICROSOFT CORP
+    Text: Microsoft products and services. Surface is designed to help...
+    Related Risks: Racial Injustice, Inequity, Competition...
+
+  Result 2 (score: 0.920):
+    Company: MICROSOFT CORP
+    Text: wide spectrum of technologies, tools, and platforms...
+```
+
+---
+
+### Sample 3: Basic Fulltext Search
 
 **File**: `context_provider_basic.py`
 
@@ -366,18 +437,18 @@ Agent: Technology companies face several risk factors, including:
 
 ---
 
-### Sample 2: Vector Search with Microsoft Foundry Embeddings
+### Sample 4: Vector Search with Microsoft Foundry Embeddings
 
 **File**: `context_provider_vector.py`
 
 **What it demonstrates**: Semantic search using vector embeddings from Microsoft Foundry.
 
 **Configuration used**:
-- `index_type="vector"` — Uses Neo4j's vector index
-- `vectorizer=AzureAIVectorizer(...)` — Custom vectorizer using Azure's embedding model
+- `index_type="vector"` — Uses Neo4j's vector index via `VectorRetriever`
+- `embedder=AzureAIEmbedder(...)` — neo4j-graphrag compatible embedder using Azure's embedding model
 - Finds semantically similar content, not just keyword matches
 
-**How it works**: The sample includes an `AzureAIVectorizer` class that calls Microsoft Foundry's embedding endpoint. When you ask a question:
+**How it works**: The sample uses `AzureAIEmbedder` which calls Microsoft Foundry's embedding endpoint. When you ask a question:
 1. The provider embeds your question into a 1536-dimensional vector
 2. Searches for document chunks with similar embeddings
 3. Returns conceptually related content even if exact words differ
@@ -414,7 +485,7 @@ Agent: The technology sector faces several challenges and risks:
 
 ---
 
-### Sample 3: Graph-Enriched Mode
+### Sample 5: Graph-Enriched Mode
 
 **File**: `context_provider_graph_enriched.py`
 
@@ -493,7 +564,7 @@ Notice how the agent knows both the products AND the risks—information that ca
 
 ---
 
-### Sample 4: Aircraft Maintenance Search
+### Sample 6: Aircraft Maintenance Search
 
 **File**: `aircraft_maintenance_search.py`
 
@@ -558,7 +629,7 @@ Agent: Electrical faults occurred across different aircraft:
 
 ---
 
-### Sample 5: Flight Delays Analysis
+### Sample 7: Flight Delays Analysis
 
 **File**: `aircraft_flight_delays.py`
 
@@ -602,7 +673,7 @@ These patterns suggest recurring security challenges at specific airports.
 
 ---
 
-### Sample 6: Component Health Analysis
+### Sample 8: Component Health Analysis
 
 **File**: `component_health.py`
 
@@ -676,8 +747,9 @@ These parameters are passed when creating a `Neo4jContextProvider` instance:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `index_name` | str | **Required** | Name of the Neo4j index to query. This must match an existing vector or fulltext index in your database. |
-| `index_type` | "vector" \| "fulltext" | "vector" | Type of search to perform. Vector search finds semantically similar content; fulltext search finds keyword matches. |
+| `index_name` | str | **Required** | Name of the Neo4j index to query. For vector/hybrid: the vector index name. For fulltext: the fulltext index name. |
+| `index_type` | "vector" \| "fulltext" \| "hybrid" | "vector" | Type of search to perform. Vector finds semantically similar content; fulltext finds keyword matches; hybrid combines both. |
+| `fulltext_index_name` | str | None | Fulltext index name for hybrid search. **Required** when `index_type="hybrid"`. |
 
 #### Search Behavior
 
@@ -689,11 +761,11 @@ These parameters are passed when creating a `Neo4jContextProvider` instance:
 | `context_prompt` | str | Built-in | System message prepended to context. Tells the AI how to use the retrieved information. |
 | `message_history_count` | int | 10 | Number of recent messages to include in the search query. Limits context window usage. |
 
-#### Vector Search Parameters
+#### Embedding Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `vectorizer` | VectorizerProtocol | None | Object with `aembed()` method that converts text to vectors. Required for vector search. |
+| `embedder` | neo4j_graphrag.Embedder | None | neo4j-graphrag compatible embedder for converting text to vectors. **Required** when `index_type="vector"` or `index_type="hybrid"`. Use `AzureAIEmbedder` for Microsoft Foundry. |
 
 #### Fulltext Search Parameters
 
@@ -736,87 +808,51 @@ ORDER BY score DESC
 
 ---
 
-## Future Work
+## Implemented Features
 
 ### Hybrid Search
 
-A planned enhancement for the Neo4j Context Provider is **hybrid search**—the ability to combine vector search and fulltext search in a single query. This is already supported by Neo4j's GraphRAG library and will bring the provider to full parity with the Azure AI Search provider's capabilities.
+The provider supports **hybrid search**—combining vector search and fulltext search in a single query using neo4j-graphrag's `HybridRetriever` and `HybridCypherRetriever`.
 
 #### Why Hybrid Search Matters
 
-Vector search and fulltext search each have strengths and weaknesses:
+Vector search and fulltext search each have strengths:
 
-**Vector search** (semantic):
-- Understands meaning and concepts
-- Finds related content even when exact words differ
-- Great for questions like "What are the financial risks?" (finds content about "revenue concerns", "market volatility", etc.)
-- Weakness: May miss results when the user uses specific names or technical terms
+- **Vector search**: Understands meaning and concepts; finds related content even when exact words differ
+- **Fulltext search**: Matches exact terms and names; precise for specific entities
+- **Hybrid search**: Combines both for the best of both worlds
 
-**Fulltext search** (keyword):
-- Matches exact terms and names
-- Excellent for finding specific entities like "Apple Inc" or "NVIDIA"
-- Fast and precise for keyword queries
-- Weakness: Misses semantically related content that uses different words
+#### Example Usage
 
-**Hybrid search** combines both:
-1. Runs vector and fulltext searches simultaneously
-2. Normalizes the scores from each method so they're comparable
-3. Merges the results, removing duplicates
-4. Calculates a combined score using a configurable weight (the "alpha" parameter)
-5. Returns the top results ranked by combined relevance
-
-#### How the Alpha Parameter Works
-
-The alpha parameter controls the balance between the two search methods:
-
-```
-combined_score = (alpha × vector_score) + ((1 - alpha) × fulltext_score)
+```python
+provider = Neo4jContextProvider(
+    index_name="chunkEmbeddings",        # Vector index
+    index_type="hybrid",
+    fulltext_index_name="chunkFulltext", # Fulltext index
+    mode="graph_enriched",               # Optional graph traversal
+    retrieval_query=COMPANY_RISKS_QUERY,
+    embedder=embedder,
+)
 ```
 
-| Alpha Value | Behavior |
-|-------------|----------|
-| `alpha=1.0` | Pure vector search (semantic only) |
-| `alpha=0.7` | 70% semantic, 30% keyword (favors meaning) |
-| `alpha=0.5` | Equal weight to both methods |
-| `alpha=0.3` | 30% semantic, 70% keyword (favors exact matches) |
-| `alpha=0.0` | Pure fulltext search (keywords only) |
+---
 
-The default value of 0.7 works well for most use cases—it prioritizes semantic understanding while still boosting results that match exact terms.
+## Future Work
 
-#### Example: When Hybrid Outperforms Single Methods
+### Neo4j-Backed Conversation Memory
 
-Consider the query: "What are Microsoft's cloud computing risks?"
+The provider's `invoked()` method is currently a stub. A future enhancement could store conversation history in Neo4j for long-term memory, enabling:
 
-- **Vector-only** might find general content about cloud risks but miss Microsoft-specific documents
-- **Fulltext-only** might find documents mentioning "Microsoft" but miss relevant content about "Azure" or "infrastructure"
-- **Hybrid** finds both: Microsoft-specific content AND semantically related cloud/infrastructure content
+- Persistent conversation memory across sessions
+- Memory retrieval based on semantic similarity to current conversation
+- Knowledge graph updates based on new information in conversations
 
-#### Planned Implementation
+### Additional Retrievers
 
-The hybrid search enhancement will add:
+The neo4j-graphrag library supports additional retrievers that could be integrated:
 
-1. **New index type**: `index_type="hybrid"` alongside the existing "vector" and "fulltext" options
-
-2. **Configuration parameters**:
-   - `fulltext_index_name`: The name of the fulltext index to combine with the vector index
-   - `hybrid_alpha`: The weight parameter (default 0.7)
-
-3. **Example usage**:
-   ```python
-   provider = Neo4jContextProvider(
-       index_name="chunkEmbeddings",        # Vector index
-       index_type="hybrid",
-       fulltext_index_name="chunkFulltext", # Fulltext index
-       hybrid_alpha=0.7,                    # 70% semantic, 30% keyword
-       mode="graph_enriched",
-       retrieval_query=COMPANY_RISKS_QUERY,
-       vectorizer=vectorizer,
-   )
-   ```
-
-4. **Graph enrichment**: Hybrid search will work seamlessly with the existing `retrieval_query` pattern, so you can still traverse the graph after the combined search finds relevant nodes.
-
-This enhancement will give users the best of both worlds—semantic understanding for conceptual queries and keyword precision for specific entity lookups—all in a single, simple configuration.
+- `Text2CypherRetriever` — Natural language to Cypher query generation
+- Custom retrievers for specific use cases
 
 ---
 
@@ -824,9 +860,11 @@ This enhancement will give users the best of both worlds—semantic understandin
 
 The Neo4j Context Provider enables AI agents to access knowledge graph data automatically. Key architectural decisions:
 
-1. **Index-based search** rather than entity extraction—the search index handles relevance
-2. **Configurable retrieval queries** for graph-aware context—keeps the provider generic
-3. **Support for both vector and fulltext search**—choose based on your use case
-4. **Following framework patterns**—works like Azure AI Search and Redis providers
+1. **Built on neo4j-graphrag** — Uses the official library's retrievers (`VectorRetriever`, `HybridRetriever`, etc.) for reliable, well-tested search
+2. **Index-based search** rather than entity extraction—the search index handles relevance
+3. **Configurable retrieval queries** for graph-aware context—keeps the provider generic
+4. **Support for vector, fulltext, and hybrid search**—choose based on your use case
+5. **Pydantic configuration validation**—catches configuration errors early with clear messages
+6. **Following framework patterns**—works like Azure AI Search and Redis providers
 
 The provider transforms Neo4j from a database you query manually into a knowledge source that enhances every agent conversation automatically.
