@@ -1,21 +1,35 @@
 # Proposal: Neo4j Context Provider as a PyPI Library
 
-This document proposes how to restructure the `neo4j-maf-provider` project into a publishable PyPI library, separating the core provider from demo/sample code.
+## Key Goals
 
-## Executive Summary
-
-The current repository mixes library code (`neo4j_provider/`) with demo applications (`samples/`), Azure infrastructure (`infra/`), and application-specific utilities (`agent.py`, `main.py`). To publish as a PyPI package, we need to:
-
-1. **Separate concerns**: Extract the core provider into a standalone, installable package
-2. **Follow framework conventions**: Align naming and structure with the Microsoft Agent Framework ecosystem
-3. **Move demos to a separate repository or directory**: Keep samples as examples that depend on the published package
-4. **Add proper library metadata**: Classifiers, documentation, versioning, and quality tooling
+- **ALWAYS FIX THE CORE ISSUE!**
+- **COMPLETE CHANGE**: All occurrences must be changed in a single, atomic update
+- **CLEAN IMPLEMENTATION**: Simple, direct replacements only
+- **NO MIGRATION PHASES**: Do not create temporary compatibility periods
+- **NO ROLLBACK PLANS**: Never create rollback plans
+- **NO PARTIAL UPDATES**: Change everything or change nothing
+- **NO COMPATIBILITY LAYERS**: Do not maintain old and new paths simultaneously
+- **NO BACKUPS OF OLD CODE**: Do not comment out old code "just in case"
+- **NO CODE DUPLICATION**: Do not duplicate functions to handle both patterns
+- **NO WRAPPER FUNCTIONS**: Direct replacements only, no abstraction layers
+- **DO NOT CALL FUNCTIONS ENHANCED OR IMPROVED**: Update the actual methods directly
+- **USE MODULES AND CLEAN CODE!**
 
 ---
 
-## Proposed Package Name and Namespace
+## Executive Summary
 
-Following the Microsoft Agent Framework naming convention observed in the ecosystem:
+Restructure `neo4j-maf-provider` into a **uv workspace monorepo** with two packages:
+1. `agent-framework-neo4j` - The publishable PyPI library
+2. `neo4j-provider-samples` - Demo applications that depend on the library
+
+This is a complete cut-over. The old structure is deleted entirely and replaced with the new structure in a single atomic change.
+
+---
+
+## Package Naming
+
+Following the Microsoft Agent Framework ecosystem conventions:
 
 | Element | Value |
 |---------|-------|
@@ -24,152 +38,135 @@ Following the Microsoft Agent Framework naming convention observed in the ecosys
 | **Primary export** | `Neo4jContextProvider` |
 | **Settings class** | `Neo4jSettings` |
 
-This follows the pattern established by `agent-framework-redis`, `agent-framework-azure-ai-search`, and `agent-framework-mem0`.
-
 ---
 
-## Current vs Proposed Structure
-
-### Current Structure
+## New Structure (UV Workspaces Monorepo)
 
 ```
 neo4j-maf-provider/
-├── src/
-│   ├── neo4j_provider/           # Core library code (should be package)
-│   │   ├── __init__.py
-│   │   ├── provider.py           # Main provider implementation
-│   │   ├── settings.py           # Pydantic settings
-│   │   ├── embedder.py           # Azure AI embedder
-│   │   ├── fulltext.py           # Fulltext retriever
-│   │   └── stop_words.py         # Stop word list
-│   │
-│   ├── samples/                   # Demo applications (should be separate)
-│   │   ├── azure_thread_memory.py
-│   │   ├── semantic_search.py
-│   │   ├── context_provider_*.py
-│   │   ├── aircraft_*.py
-│   │   └── component_health.py
-│   │
-│   ├── utils/                     # Shared utilities (application-specific)
-│   │   ├── env.py
-│   │   └── logging.py
-│   │
-│   ├── agent.py                   # Demo agent setup (application-specific)
-│   └── main.py                    # Demo CLI entry point (application-specific)
+├── pyproject.toml                           # Workspace root
+├── README.md                                # Repository overview
+├── CLAUDE.md                                # Claude Code instructions
+├── LICENSE
 │
-├── infra/                         # Azure infrastructure (not for library)
-├── tests/                         # Test suite (keep with library)
-└── pyproject.toml                 # Mixed package + app config
-```
-
-### Proposed Structure: Monorepo with Workspaces
-
-The cleanest approach uses a **monorepo with uv workspaces**, allowing the library and samples to coexist while maintaining clear separation:
-
-```
-neo4j-maf-provider/
 ├── packages/
-│   └── agent-framework-neo4j/          # Publishable PyPI package
-│       ├── agent_framework_neo4j/
-│       │   ├── __init__.py             # Public API exports
-│       │   ├── _provider.py            # Neo4jContextProvider
-│       │   ├── _settings.py            # Neo4jSettings, AzureAISettings
-│       │   ├── _embedder.py            # AzureAIEmbedder
-│       │   ├── _fulltext.py            # FulltextRetriever
-│       │   └── _stop_words.py          # Stop word list
-│       ├── tests/
-│       │   ├── conftest.py
-│       │   ├── test_provider.py
-│       │   ├── test_settings.py
-│       │   └── test_fulltext.py
-│       ├── pyproject.toml              # Library-only dependencies
-│       ├── README.md                   # Library documentation
-│       └── LICENSE
+│   └── agent-framework-neo4j/               # Publishable PyPI package
+│       ├── pyproject.toml
+│       ├── README.md
+│       └── src/
+│           └── agent_framework_neo4j/
+│               ├── __init__.py              # Public API exports
+│               ├── _provider.py             # Neo4jContextProvider
+│               ├── _settings.py             # Neo4jSettings, AzureAISettings
+│               ├── _embedder.py             # AzureAIEmbedder
+│               ├── _fulltext.py             # FulltextRetriever
+│               └── _stop_words.py           # Stop word list
 │
-├── samples/                             # Demo applications (separate project)
-│   ├── 01_basic_fulltext/
+├── samples/                                 # Demo applications
+│   ├── pyproject.toml                       # Depends on agent-framework-neo4j
+│   ├── README.md
+│   │
+│   ├── basic_fulltext/
 │   │   ├── main.py
-│   │   ├── .env.example
 │   │   └── README.md
-│   ├── 02_vector_search/
+│   │
+│   ├── vector_search/
 │   │   ├── main.py
-│   │   ├── .env.example
 │   │   └── README.md
-│   ├── 03_graph_enriched/
+│   │
+│   ├── graph_enriched/
 │   │   ├── main.py
-│   │   ├── .env.example
 │   │   └── README.md
-│   ├── 04_aircraft_domain/
+│   │
+│   ├── aircraft_domain/
 │   │   ├── maintenance_search.py
 │   │   ├── flight_delays.py
 │   │   ├── component_health.py
-│   │   ├── .env.example
 │   │   └── README.md
-│   ├── shared/                          # Shared utilities for samples
-│   │   ├── __init__.py
-│   │   ├── agent.py                     # Agent setup helpers
-│   │   ├── logging.py                   # Logging configuration
-│   │   └── env.py                       # Environment loading
-│   ├── pyproject.toml                   # Sample-specific dependencies
-│   └── README.md                        # Samples overview
+│   │
+│   └── shared/
+│       ├── __init__.py
+│       ├── agent.py                         # Agent setup helpers
+│       ├── env.py                           # Environment loading
+│       └── logging.py                       # Logging configuration
 │
-├── infra/                               # Azure infrastructure (unchanged)
+├── tests/                                   # Library tests
+│   ├── conftest.py
+│   ├── test_provider.py
+│   ├── test_settings.py
+│   └── test_fulltext.py
+│
+├── infra/                                   # Azure infrastructure (unchanged)
 │   ├── main.bicep
 │   └── ...
 │
-├── docs/                                # Documentation site (optional)
-│   ├── getting_started.md
-│   ├── api_reference.md
-│   ├── architecture.md
-│   └── examples.md
-│
-├── pyproject.toml                       # Workspace root configuration
-├── README.md                            # Repository overview
-├── CLAUDE.md                            # Claude Code instructions
-└── LICENSE
+└── docs/                                    # Documentation
+    ├── getting_started.md
+    ├── api_reference.md
+    └── architecture.md
 ```
 
 ---
 
-## Alternative Structure: Flat Single-Package Layout
+## Root `pyproject.toml` (Workspace Configuration)
 
-For simpler maintenance, a flat structure with the library at root level is also viable:
+```toml
+[project]
+name = "neo4j-maf-provider-workspace"
+version = "0.1.0"
+description = "Neo4j Context Provider workspace"
+requires-python = ">=3.10"
 
+[tool.uv.workspace]
+members = [
+    "packages/agent-framework-neo4j",
+    "samples",
+]
+
+[tool.uv.sources]
+agent-framework-neo4j = { workspace = true }
+
+[tool.uv]
+prerelease = "if-necessary-or-explicit"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+
+[tool.ruff.isort]
+known-first-party = ["agent_framework_neo4j"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.coverage.run]
+source = ["packages/agent-framework-neo4j/src/agent_framework_neo4j"]
+branch = true
 ```
-neo4j-maf-provider/
-├── src/
-│   └── agent_framework_neo4j/          # Renamed from neo4j_provider
-│       ├── __init__.py
-│       ├── _provider.py
-│       ├── _settings.py
-│       ├── _embedder.py
-│       ├── _fulltext.py
-│       └── _stop_words.py
-│
-├── samples/                             # Demos (not installed)
-│   └── ... (same as above)
-│
-├── tests/
-│   └── ...
-│
-├── docs/
-│   └── ...
-│
-├── infra/
-│   └── ...
-│
-├── pyproject.toml                       # Single package config
-├── README.md
-└── LICENSE
-```
-
-**Recommendation**: Start with the flat single-package layout for simplicity. Migrate to monorepo only if multiple packages emerge (e.g., `agent-framework-neo4j-graphrag` for advanced graph features).
 
 ---
 
-## Package Configuration
+## Library Package `pyproject.toml`
 
-### Library `pyproject.toml`
+**Location**: `packages/agent-framework-neo4j/pyproject.toml`
 
 ```toml
 [project]
@@ -206,7 +203,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Minimal dependencies for core functionality
 dependencies = [
     "agent-framework-core>=1.0.0b",
     "neo4j>=5.0.0",
@@ -216,12 +212,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Azure AI embeddings support
 azure = [
     "azure-identity>=1.19.0",
     "azure-ai-inference>=1.0.0b7",
 ]
-# Development dependencies
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -229,23 +223,11 @@ dev = [
     "mypy>=1.10.0",
     "ruff>=0.4.0",
 ]
-# Documentation
-docs = [
-    "mkdocs>=1.5.0",
-    "mkdocs-material>=9.0.0",
-    "mkdocstrings[python]>=0.25.0",
-]
-# All optional dependencies
-all = [
-    "agent-framework-neo4j[azure,dev,docs]",
-]
 
 [project.urls]
-Homepage = "https://github.com/yourorg/agent-framework-neo4j"
-Documentation = "https://yourorg.github.io/agent-framework-neo4j"
-Repository = "https://github.com/yourorg/agent-framework-neo4j"
-Issues = "https://github.com/yourorg/agent-framework-neo4j/issues"
-Changelog = "https://github.com/yourorg/agent-framework-neo4j/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/yourorg/neo4j-maf-provider"
+Repository = "https://github.com/yourorg/neo4j-maf-provider"
+Issues = "https://github.com/yourorg/neo4j-maf-provider/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -253,90 +235,42 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_framework_neo4j"]
-
-[tool.hatch.build.targets.sdist]
-include = [
-    "/src",
-    "/tests",
-    "/README.md",
-    "/LICENSE",
-]
-
-[tool.uv]
-prerelease = "if-necessary-or-explicit"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-
-[tool.ruff]
-line-length = 120
-target-version = "py310"
-select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "I",      # isort
-    "B",      # flake8-bugbear
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade
-    "ARG",    # flake8-unused-arguments
-    "SIM",    # flake8-simplify
-]
-ignore = [
-    "E501",   # line too long (handled by formatter)
-]
-
-[tool.ruff.isort]
-known-first-party = ["agent_framework_neo4j"]
-
-[tool.mypy]
-python_version = "3.10"
-strict = true
-plugins = ["pydantic.mypy"]
-
-[tool.coverage.run]
-source = ["agent_framework_neo4j"]
-branch = true
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "if TYPE_CHECKING:",
-    "raise NotImplementedError",
-]
 ```
 
-### Samples `pyproject.toml`
+---
+
+## Samples Package `pyproject.toml`
+
+**Location**: `samples/pyproject.toml`
 
 ```toml
 [project]
 name = "neo4j-provider-samples"
 version = "0.1.0"
-description = "Sample applications demonstrating agent-framework-neo4j"
+description = "Sample applications for agent-framework-neo4j"
 requires-python = ">=3.10"
 dependencies = [
-    "agent-framework-neo4j[azure]",    # Install from PyPI
+    "agent-framework-neo4j[azure]",
     "agent-framework-azure-ai>=1.0.0b",
     "python-dotenv",
 ]
 
 [project.scripts]
-run-samples = "shared.cli:main"
+start-samples = "shared.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["shared"]
 ```
 
 ---
 
-## Library Module Structure
+## Library Public API
 
-### Public API (`__init__.py`)
-
-The library should export a clean, minimal public API:
+**Location**: `packages/agent-framework-neo4j/src/agent_framework_neo4j/__init__.py`
 
 ```python
 """
@@ -344,24 +278,6 @@ Neo4j Context Provider for Microsoft Agent Framework.
 
 Provides RAG context from Neo4j knowledge graphs using vector,
 fulltext, or hybrid search with optional graph enrichment.
-
-Example:
-    from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
-
-    settings = Neo4jSettings()  # Loads from environment
-
-    provider = Neo4jContextProvider(
-        uri=settings.uri,
-        username=settings.username,
-        password=settings.get_password(),
-        index_name="chunkEmbeddings",
-        index_type="vector",
-        embedder=my_embedder,
-    )
-
-    async with provider:
-        # Use with agent
-        pass
 """
 
 from ._provider import Neo4jContextProvider
@@ -372,63 +288,88 @@ from ._fulltext import FulltextRetriever
 __version__ = "0.1.0"
 
 __all__ = [
-    # Core provider
     "Neo4jContextProvider",
-    # Configuration
     "Neo4jSettings",
     "AzureAISettings",
-    # Utilities
     "AzureAIEmbedder",
     "FulltextRetriever",
-    # Version
     "__version__",
 ]
 ```
 
-### Internal Modules (Prefixed with Underscore)
+---
 
-Following the Agent Framework pattern, internal implementation files use underscore prefix:
+## File Mapping (Old → New)
 
-- `_provider.py` - Main `Neo4jContextProvider` class
-- `_settings.py` - `Neo4jSettings` and `AzureAISettings` Pydantic models
-- `_embedder.py` - `AzureAIEmbedder` implementation
-- `_fulltext.py` - `FulltextRetriever` for fulltext-only search
-- `_stop_words.py` - Stop word list for fulltext filtering
-
-This convention signals that direct imports from these modules are not part of the public API and may change without notice.
+| Old Location | New Location |
+|--------------|--------------|
+| `src/neo4j_provider/provider.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/_provider.py` |
+| `src/neo4j_provider/settings.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/_settings.py` |
+| `src/neo4j_provider/embedder.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/_embedder.py` |
+| `src/neo4j_provider/fulltext.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/_fulltext.py` |
+| `src/neo4j_provider/stop_words.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/_stop_words.py` |
+| `src/neo4j_provider/__init__.py` | `packages/agent-framework-neo4j/src/agent_framework_neo4j/__init__.py` |
+| `src/samples/context_provider_basic.py` | `samples/basic_fulltext/main.py` |
+| `src/samples/context_provider_vector.py` | `samples/vector_search/main.py` |
+| `src/samples/context_provider_graph_enriched.py` | `samples/graph_enriched/main.py` |
+| `src/samples/aircraft_maintenance_search.py` | `samples/aircraft_domain/maintenance_search.py` |
+| `src/samples/aircraft_flight_delays.py` | `samples/aircraft_domain/flight_delays.py` |
+| `src/samples/component_health.py` | `samples/aircraft_domain/component_health.py` |
+| `src/samples/semantic_search.py` | `samples/vector_search/semantic_search.py` |
+| `src/samples/azure_thread_memory.py` | `samples/basic_fulltext/azure_thread_memory.py` |
+| `src/samples/_utils.py` | `samples/shared/utils.py` |
+| `src/utils/env.py` | `samples/shared/env.py` |
+| `src/utils/logging.py` | `samples/shared/logging.py` |
+| `src/agent.py` | `samples/shared/agent.py` |
+| `src/main.py` | `samples/shared/cli.py` |
+| `tests/test_provider.py` | `tests/test_provider.py` |
 
 ---
 
-## Sample Organization
+## Files to Delete
 
-### Progressive Complexity
+These files and directories are removed entirely:
 
-Organize samples by increasing complexity, numbered for clear progression:
+- `src/` (entire directory - contents moved to new locations)
+- `src/__init__.py`
+- `src/neo4j_provider/` (moved to `packages/agent-framework-neo4j/`)
+- `src/samples/` (moved to `samples/`)
+- `src/utils/` (moved to `samples/shared/`)
 
-| Sample | Description | Index Type | Mode | Features |
-|--------|-------------|------------|------|----------|
-| `01_basic_fulltext/` | Simplest fulltext search | fulltext | basic | Stop word filtering |
-| `02_vector_search/` | Vector similarity search | vector | basic | Azure AI embeddings |
-| `03_graph_enriched/` | Graph traversal context | vector | graph_enriched | Custom Cypher queries |
-| `04_aircraft_domain/` | Domain-specific examples | mixed | mixed | Multiple query patterns |
+---
 
-### Sample Template
+## Import Changes
 
-Each sample directory follows a consistent structure:
+All imports change from the old module name to the new module name:
 
-```
-01_basic_fulltext/
-├── main.py              # Entry point with argparse
-├── .env.example         # Required environment variables
-└── README.md            # Setup instructions, expected output
-```
+| Old Import | New Import |
+|------------|------------|
+| `from neo4j_provider import Neo4jContextProvider` | `from agent_framework_neo4j import Neo4jContextProvider` |
+| `from neo4j_provider import Neo4jSettings` | `from agent_framework_neo4j import Neo4jSettings` |
+| `from neo4j_provider import AzureAISettings` | `from agent_framework_neo4j import AzureAISettings` |
+| `from neo4j_provider import AzureAIEmbedder` | `from agent_framework_neo4j import AzureAIEmbedder` |
+| `from neo4j_provider import FulltextRetriever` | `from agent_framework_neo4j import FulltextRetriever` |
+| `from neo4j_provider.fulltext import FulltextRetriever` | `from agent_framework_neo4j import FulltextRetriever` |
+| `from neo4j_provider.settings import Neo4jSettings` | `from agent_framework_neo4j import Neo4jSettings` |
 
-**`main.py` Pattern:**
+Internal imports within the library change:
+
+| Old Internal Import | New Internal Import |
+|---------------------|---------------------|
+| `from neo4j_provider.fulltext import FulltextRetriever` | `from agent_framework_neo4j._fulltext import FulltextRetriever` |
+| `from neo4j_provider.settings import Neo4jSettings` | `from agent_framework_neo4j._settings import Neo4jSettings` |
+
+---
+
+## Sample Structure
+
+### `samples/basic_fulltext/main.py`
 
 ```python
 """Basic fulltext search with Neo4j Context Provider."""
 
 import asyncio
+
 from dotenv import load_dotenv
 
 from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
@@ -456,177 +397,124 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Shared Sample Utilities
-
-The `samples/shared/` directory contains utilities that are specific to running demos but not part of the library:
-
-- **`agent.py`** - Helper functions for creating agents with the provider
-- **`logging.py`** - Consistent logging setup across samples
-- **`env.py`** - Environment file discovery and loading
-- **`cli.py`** - Interactive menu for selecting samples
-
----
-
-## Migration Steps
-
-### Phase 1: Rename and Restructure (Non-Breaking)
-
-1. **Rename module directory**
-   - `src/neo4j_provider/` → `src/agent_framework_neo4j/`
-
-2. **Prefix internal files**
-   - `provider.py` → `_provider.py`
-   - `settings.py` → `_settings.py`
-   - `embedder.py` → `_embedder.py`
-   - `fulltext.py` → `_fulltext.py`
-   - `stop_words.py` → `_stop_words.py`
-
-3. **Update imports throughout codebase**
-   - Update all `from neo4j_provider import ...` to `from agent_framework_neo4j import ...`
-
-4. **Move application code**
-   - `src/samples/` → `samples/` (top-level)
-   - `src/utils/` → `samples/shared/`
-   - `src/agent.py` → `samples/shared/agent.py`
-   - `src/main.py` → `samples/shared/cli.py`
-   - Delete `src/__init__.py` (not needed for src layout)
-
-### Phase 2: Update Configuration
-
-1. **Split `pyproject.toml`**
-   - Create library-focused `pyproject.toml` at root
-   - Create `samples/pyproject.toml` for demo dependencies
-
-2. **Update build configuration**
-   - Remove samples from wheel package list
-   - Update `[tool.hatch.build.targets.wheel]` to only include library
-
-3. **Add library metadata**
-   - Classifiers, keywords, URLs
-   - License file reference
-
-### Phase 3: Documentation and Quality
-
-1. **Update README.md**
-   - Focus on library usage (installation, quick start, API)
-   - Move sample details to `samples/README.md`
-
-2. **Add API documentation**
-   - Docstrings on all public classes and methods
-   - Consider MkDocs for hosted documentation
-
-3. **Add quality tooling**
-   - Pre-commit hooks for ruff, mypy
-   - GitHub Actions for CI/CD
-   - Coverage reporting
-
-### Phase 4: Publishing
-
-1. **Choose repository location**
-   - Option A: Keep in current repo, publish library subdirectory
-   - Option B: Create new `agent-framework-neo4j` repository
-
-2. **Set up PyPI publishing**
-   - Create PyPI account and API token
-   - Configure GitHub Actions for automated releases
-   - Use semantic versioning with `bumpversion` or similar
-
-3. **Test installation**
-   - `pip install agent-framework-neo4j`
-   - Verify all exports work correctly
-   - Test samples with installed package
-
----
-
-## Dependency Considerations
-
-### Core vs Optional Dependencies
-
-| Dependency | Category | Rationale |
-|------------|----------|-----------|
-| `agent-framework-core` | Core | Required for ContextProvider interface |
-| `neo4j` | Core | Required for database connection |
-| `neo4j-graphrag` | Core | Required for retriever implementations |
-| `pydantic` | Core | Required for settings validation |
-| `pydantic-settings` | Core | Required for environment variable loading |
-| `azure-identity` | Optional (`[azure]`) | Only needed for Azure AI embeddings |
-| `azure-ai-inference` | Optional (`[azure]`) | Only needed for Azure AI embeddings |
-
-### Why This Split?
-
-Users who bring their own embedder (e.g., OpenAI, Cohere, local models) shouldn't need Azure SDK dependencies. The `[azure]` extra makes this explicit:
-
-```bash
-# Minimal installation (bring your own embedder)
-pip install agent-framework-neo4j
-
-# With Azure AI embeddings support
-pip install agent-framework-neo4j[azure]
-
-# Full development environment
-pip install agent-framework-neo4j[all]
-```
-
----
-
-## Version Strategy
-
-Follow semantic versioning aligned with the Agent Framework ecosystem:
-
-| Version Format | Usage |
-|----------------|-------|
-| `0.1.0` | Initial development |
-| `0.1.0b1` | Beta releases |
-| `1.0.0` | First stable release |
-| `1.0.0b260115` | Date-based beta (matches Agent Framework pattern) |
-
-**Recommendation**: Start with `0.1.0` for initial PyPI release. Move to `1.0.0` when the Agent Framework itself reaches stable release.
-
----
-
-## Testing Strategy
-
-### Test Organization
-
-```
-tests/
-├── conftest.py              # Shared fixtures (mock Neo4j, mock embedder)
-├── test_provider.py         # Neo4jContextProvider tests
-├── test_settings.py         # Settings validation tests
-├── test_fulltext.py         # FulltextRetriever tests
-├── test_embedder.py         # AzureAIEmbedder tests
-└── integration/             # Optional integration tests (require real Neo4j)
-    └── test_search.py
-```
-
-### Key Test Categories
-
-1. **Unit Tests** (mock all external dependencies)
-   - Provider initialization and configuration validation
-   - Message filtering and context formatting
-   - Settings loading from environment variables
-
-2. **Integration Tests** (optional, require Neo4j instance)
-   - End-to-end search operations
-   - Graph enrichment queries
-   - Connection management
-
-### Mocking Pattern
+### `samples/shared/cli.py`
 
 ```python
-# conftest.py
+"""Interactive CLI for running samples."""
+
+import sys
+from samples.basic_fulltext import main as basic_main
+from samples.vector_search import main as vector_main
+from samples.graph_enriched import main as graph_main
+
+
+SAMPLES = {
+    "1": ("Basic Fulltext Search", basic_main),
+    "2": ("Vector Search", vector_main),
+    "3": ("Graph Enriched", graph_main),
+}
+
+
+def main() -> None:
+    if len(sys.argv) > 1:
+        choice = sys.argv[1]
+        if choice in SAMPLES:
+            _, sample_main = SAMPLES[choice]
+            sample_main.main()
+            return
+
+    print("Available samples:")
+    for key, (name, _) in SAMPLES.items():
+        print(f"  {key}: {name}")
+
+    choice = input("\nSelect sample: ").strip()
+    if choice in SAMPLES:
+        _, sample_main = SAMPLES[choice]
+        sample_main.main()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## Commands
+
+### Setup
+
+```bash
+# Install all workspace packages in development mode
+uv sync --prerelease=allow
+
+# Install only the library
+uv sync --package agent-framework-neo4j --prerelease=allow
+
+# Install library with Azure extras
+uv sync --package agent-framework-neo4j --extra azure --prerelease=allow
+```
+
+### Run Samples
+
+```bash
+# Interactive menu
+uv run start-samples
+
+# Run specific sample
+uv run python samples/basic_fulltext/main.py
+uv run python samples/vector_search/main.py
+uv run python samples/graph_enriched/main.py
+```
+
+### Development
+
+```bash
+# Run tests
+uv run pytest
+
+# Type checking
+uv run mypy packages/agent-framework-neo4j/src/agent_framework_neo4j
+
+# Linting
+uv run ruff check packages/agent-framework-neo4j/src
+uv run ruff format packages/agent-framework-neo4j/src
+```
+
+### Build and Publish
+
+```bash
+# Build the library package
+uv build --package agent-framework-neo4j
+
+# Publish to PyPI
+uv publish --package agent-framework-neo4j
+```
+
+---
+
+## Test Configuration
+
+**Location**: `tests/conftest.py`
+
+```python
+"""Shared test fixtures."""
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
+
 
 @pytest.fixture
 def mock_neo4j_driver():
+    """Mock Neo4j driver for unit tests."""
     driver = MagicMock()
     driver.verify_connectivity = MagicMock()
     driver.close = MagicMock()
     return driver
 
+
 @pytest.fixture
 def mock_embedder():
+    """Mock embedder for unit tests."""
     embedder = MagicMock()
     embedder.embed_query = MagicMock(return_value=[0.1] * 1536)
     return embedder
@@ -634,9 +522,9 @@ def mock_embedder():
 
 ---
 
-## Documentation Structure
+## Library README
 
-### Library README.md (Top-Level)
+**Location**: `packages/agent-framework-neo4j/README.md`
 
 ```markdown
 # agent-framework-neo4j
@@ -645,143 +533,117 @@ Neo4j Context Provider for Microsoft Agent Framework - RAG with knowledge graphs
 
 ## Installation
 
+```bash
 pip install agent-framework-neo4j
 
 # With Azure AI embeddings
 pip install agent-framework-neo4j[azure]
+```
 
 ## Quick Start
 
-[Minimal working example]
+```python
+from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
+
+settings = Neo4jSettings()  # Loads from environment
+
+provider = Neo4jContextProvider(
+    uri=settings.uri,
+    username=settings.username,
+    password=settings.get_password(),
+    index_name="chunkEmbeddings",
+    index_type="vector",
+    embedder=my_embedder,
+)
+
+async with provider:
+    # Use with Microsoft Agent Framework
+    pass
+```
 
 ## Features
 
 - Vector, fulltext, and hybrid search modes
-- Graph-enriched retrieval with custom Cypher
+- Graph-enriched retrieval with custom Cypher queries
 - Configurable message history windowing
 - Pydantic settings for environment-based configuration
+- Compatible with neo4j-graphrag retrievers
 
-## Documentation
+## Environment Variables
 
-- [API Reference](docs/api_reference.md)
-- [Architecture](docs/architecture.md)
-- [Examples](samples/README.md)
+```
+NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-password
+NEO4J_VECTOR_INDEX_NAME=chunkEmbeddings
+NEO4J_FULLTEXT_INDEX_NAME=search_chunks
+```
 
 ## License
 
 MIT
 ```
 
-### Samples README.md
-
-```markdown
-# Neo4j Context Provider Samples
-
-Demonstration applications for agent-framework-neo4j.
-
-## Prerequisites
-
-- Neo4j database with configured indexes
-- Azure AI project (for embeddings)
-
-## Setup
-
-1. Clone this repository
-2. Copy `.env.example` to `.env` and configure
-3. Install dependencies: `pip install -e ".[samples]"`
-
-## Running Samples
-
-[Interactive menu or direct execution instructions]
-
-## Sample Descriptions
-
-[Table of samples with descriptions]
-```
-
 ---
 
-## CI/CD Pipeline
+## Repository README
 
-### GitHub Actions Workflow
+**Location**: `README.md` (root)
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
+```markdown
+# neo4j-maf-provider
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+Monorepo containing the Neo4j Context Provider for Microsoft Agent Framework.
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --dev
-      - run: uv run pytest --cov=agent_framework_neo4j
-      - run: uv run mypy src/agent_framework_neo4j
-      - run: uv run ruff check src/
+## Structure
 
-  publish:
-    needs: test
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv build
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          api-token: ${{ secrets.PYPI_API_TOKEN }}
+- `packages/agent-framework-neo4j/` - Publishable PyPI library
+- `samples/` - Demo applications
+- `tests/` - Library tests
+- `infra/` - Azure infrastructure
+
+## Quick Start
+
+```bash
+# Setup
+uv sync --prerelease=allow
+
+# Run samples
+uv run start-samples
+
+# Run tests
+uv run pytest
+```
+
+## Publishing
+
+```bash
+uv build --package agent-framework-neo4j
+uv publish --package agent-framework-neo4j
+```
 ```
 
 ---
 
 ## Summary
 
-### Key Decisions
+| Aspect | Value |
+|--------|-------|
+| **Structure** | UV workspaces monorepo |
+| **Library package** | `packages/agent-framework-neo4j/` |
+| **Samples package** | `samples/` |
+| **Module name** | `agent_framework_neo4j` |
+| **Internal file prefix** | Underscore (`_provider.py`) |
+| **Build backend** | Hatchling |
+| **Test runner** | pytest with asyncio |
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Package name | `agent-framework-neo4j` | Follows Agent Framework ecosystem naming |
-| Module name | `agent_framework_neo4j` | PEP 8 compliant, matches package |
-| Layout | Flat src layout | Simple, well-supported, recommended by PyPA |
-| Build backend | Hatchling | Modern, fast, good src layout support |
-| Samples location | Top-level `samples/` | Clear separation, not installed with library |
-| Optional deps | `[azure]` extra | Keeps core minimal for users with other embedders |
-
-### Benefits
-
-1. **Clear separation of concerns** - Library code is independent of demo infrastructure
-2. **Easy installation** - `pip install agent-framework-neo4j` just works
-3. **Discoverable in ecosystem** - Naming aligns with other Agent Framework providers
-4. **Flexible dependencies** - Users install only what they need
-5. **Professional quality** - Type hints, tests, documentation, CI/CD
-
-### Next Steps
-
-1. Create a new branch for the restructuring work
-2. Implement Phase 1 (rename and restructure)
-3. Validate all tests pass with new structure
-4. Implement Phase 2 (configuration updates)
-5. Add documentation and quality tooling (Phase 3)
-6. Test PyPI publishing with TestPyPI first
-7. Publish to PyPI
+This is a complete cut-over. Execute all changes atomically.
 
 ---
 
 ## References
 
-- [Python Packaging User Guide - src layout vs flat layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)
-- [Writing your pyproject.toml](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
-- [pyOpenSci Python Package Guide](https://www.pyopensci.org/python-package-guide/tutorials/pyproject-toml.html)
-- [Real Python - Python pyproject.toml Guide](https://realpython.com/python-pyproject-toml/)
-- [Microsoft Agent Framework - Context Providers](https://github.com/microsoft/agent-framework)
-- [Agent Framework Samples Repository](https://github.com/microsoft/Agent-Framework-Samples)
+- [Python Packaging User Guide - src layout](https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/)
+- [UV Workspaces Documentation](https://docs.astral.sh/uv/concepts/workspaces/)
+- [Writing pyproject.toml](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
+- [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)

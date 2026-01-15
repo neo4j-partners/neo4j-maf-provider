@@ -1,81 +1,133 @@
-# Neo4j Context Provider for Microsoft Agent Framework
+# neo4j-maf-provider
 
-A context provider that enables AI agents to retrieve knowledge graph context from Neo4j, supporting both vector and fulltext search with optional graph enrichment.
+Monorepo containing the Neo4j Context Provider for Microsoft Agent Framework.
 
-## What is a Context Provider?
+## Structure
 
-Context providers are plugins for the [Microsoft Agent Framework](https://github.com/microsoft/agent-framework) that automatically inject relevant information into an agent's conversation before the AI model processes each message. The Neo4j Context Provider retrieves data from your Neo4j knowledge graph—whether through semantic vector search or keyword-based fulltext search—and enriches agent responses with graph-aware context.
-
-For detailed architecture, configuration options, and sample walkthroughs, see **[NEO4J_PROVIDER_ARCHITECTURE.md](NEO4J_PROVIDER_ARCHITECTURE.md)**.
-
-## Prerequisites
-
-- **[uv](https://github.com/astral-sh/uv)**: Fast Python package installer
-- **[Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)**: For infrastructure provisioning
-- **[Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)**: For authentication
-- **Neo4j Database**: With vector or fulltext indexes configured
-
-## Getting Started
-
-### 1. Provision Azure Infrastructure
-
-Deploy Microsoft Foundry resources (for embeddings and chat models):
-
-```bash
-azd up
+```
+neo4j-maf-provider/
+├── packages/agent-framework-neo4j/   # Publishable PyPI library
+├── samples/                           # Demo applications (self-contained)
+│   ├── azure.yaml                     #   azd configuration
+│   ├── infra/                         #   Azure Bicep templates
+│   ├── scripts/                       #   Setup scripts
+│   └── ...                            #   Sample applications
+├── tests/                             # Library tests
+└── docs/                              # Documentation
 ```
 
-### 2. Install Dependencies
+## Quick Start
+
+### Setup
 
 ```bash
+# Install all workspace packages
 uv sync --prerelease=allow
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
-### 3. Setup Environment Variables
-
-Pull environment variables from azd and create a local `.env` file:
+### Run Samples
 
 ```bash
-uv run setup_env.py
+# Interactive menu
+uv run start-samples
+
+# Run specific sample
+uv run start-samples 3
 ```
 
-Add your Neo4j credentials to `.env`:
+### Run Tests
+
+```bash
+uv run pytest
+```
+
+## Packages
+
+### agent-framework-neo4j
+
+The core library providing Neo4j context for Microsoft Agent Framework agents.
+
+```bash
+pip install agent-framework-neo4j --pre
+```
+
+**Features:**
+- Vector, fulltext, and hybrid search modes
+- Graph-enriched retrieval with custom Cypher queries
+- Configurable message history windowing
+- Compatible with neo4j-graphrag retrievers
+
+See [packages/agent-framework-neo4j/README.md](packages/agent-framework-neo4j/README.md) for details.
+
+### neo4j-provider-samples
+
+Demo applications showcasing the library:
+
+- Basic fulltext search
+- Vector similarity search
+- Graph-enriched context
+- Aircraft domain examples
+
+See [samples/README.md](samples/README.md) for details.
+
+## Development
+
+```bash
+# Install with dev dependencies
+uv sync --prerelease=allow
+
+# Run tests
+uv run pytest
+
+# Type checking
+uv run mypy packages/agent-framework-neo4j/src/agent_framework_neo4j
+
+# Linting
+uv run ruff check packages/agent-framework-neo4j/src
+uv run ruff format packages/agent-framework-neo4j/src
+```
+
+## Publishing
+
+```bash
+# Build the library package
+uv build --package agent-framework-neo4j
+
+# Publish to PyPI
+uv publish --package agent-framework-neo4j
+```
+
+## Environment Variables
+
+### Neo4j Connection
 
 ```
-NEO4J_URI=neo4j+s://your-database.databases.neo4j.io
+NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your-password
-NEO4J_INDEX_NAME=your-index-name
+NEO4J_VECTOR_INDEX_NAME=chunkEmbeddings
+NEO4J_FULLTEXT_INDEX_NAME=search_chunks
 ```
 
-### 4. Run the Samples
+### Azure AI (for embeddings and chat)
 
-Launch the interactive demo menu:
-
-```bash
-uv run start-agent
+```
+AZURE_AI_PROJECT_ENDPOINT=https://your-project.cognitiveservices.azure.com
+AZURE_AI_MODEL_NAME=gpt-4o
+AZURE_AI_EMBEDDING_NAME=text-embedding-ada-002
 ```
 
-Or run a specific sample directly:
+## Documentation
 
-```bash
-uv run start-agent 3    # Run Context Provider (Fulltext)
-uv run start-agent a    # Run all samples
-```
+- [Library README](packages/agent-framework-neo4j/README.md)
+- [Samples README](samples/README.md)
+- [Architecture Guide](NEO4J_PROVIDER_ARCHITECTURE.md)
+- [Microsoft Agent Framework](https://aka.ms/agent-framework)
 
-## Samples
+## License
 
-The `src/samples/` directory contains working examples. Run them using `uv run start-agent`:
-
-| # | Sample | Description |
-|---|--------|-------------|
-| 1 | `agent_memory.py` | Agent Framework conversation memory using threads |
-| 2 | `semantic_search.py` | Direct vector search without Agent Framework |
-| 3 | `context_provider_basic.py` | Fulltext (keyword) search |
-| 4 | `context_provider_vector.py` | Vector search with Microsoft Foundry embeddings |
-| 5 | `context_provider_graph_enriched.py` | Graph traversal for rich context |
-| 6 | `aircraft_maintenance_search.py` | Aircraft domain with custom retrieval queries |
-| 7 | `aircraft_flight_delays.py` | Flight operations data analysis |
-| 8 | `component_health.py` | Component status with aggregated maintenance counts |
-
-See [NEO4J_PROVIDER_ARCHITECTURE.md](NEO4J_PROVIDER_ARCHITECTURE.md) for detailed walkthroughs of each sample.
+MIT
