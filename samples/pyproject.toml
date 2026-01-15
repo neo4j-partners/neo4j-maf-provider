@@ -15,9 +15,9 @@ start-samples = "samples.shared.cli:main"
 [tool.ruff]
 extend = "../pyproject.toml"
 
-[tool.flit.module]
-name = "samples"
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
-requires = ["flit_core>=3.11,<4.0"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

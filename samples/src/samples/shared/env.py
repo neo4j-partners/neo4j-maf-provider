@@ -23,10 +23,11 @@ def get_env_file_path() -> str | None:
     if os.getenv("RUNNING_IN_PRODUCTION"):
         return None
 
-    # Get project root (two levels up from shared/)
+    # Get samples root (four levels up from shared/: shared -> samples -> src -> samples/)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    samples_dir = os.path.dirname(current_dir)
-    project_root = os.path.dirname(samples_dir)
+    samples_pkg_dir = os.path.dirname(current_dir)  # samples/src/samples
+    src_dir = os.path.dirname(samples_pkg_dir)       # samples/src
+    project_root = os.path.dirname(src_dir)          # samples/
 
     # Check for .env in project root
     root_env = os.path.join(project_root, '.env')

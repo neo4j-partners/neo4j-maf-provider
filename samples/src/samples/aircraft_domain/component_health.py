@@ -91,7 +91,6 @@ async def demo_component_health() -> None:
             password=aircraft_password,
             index_name="component_search",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query=COMPONENT_RETRIEVAL_QUERY,
             top_k=3,
             message_history_count=1,
@@ -113,7 +112,7 @@ async def demo_component_health() -> None:
                     "You are an aircraft component analyst. Analyze component data and "
                     "explain maintenance history, system context, and health status. Be concise."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with component health context!\n")
                 print("-" * 50)

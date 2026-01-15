@@ -99,7 +99,7 @@ async def demo_context_provider_vector() -> None:
                     "using the provided semantic search context. Be concise and accurate. "
                     "When the context contains relevant information, cite it in your response."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with vector context provider!\n")
                 print("-" * 50)

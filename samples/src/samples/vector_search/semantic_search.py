@@ -84,7 +84,6 @@ async def demo_semantic_search() -> None:
             password=neo4j_settings.get_password(),
             index_name=neo4j_settings.vector_index_name,
             index_type="vector",
-            mode="graph_enriched",
             retrieval_query=RETRIEVAL_QUERY,
             embedder=embedder,
             top_k=3,

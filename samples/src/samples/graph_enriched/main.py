@@ -110,7 +110,6 @@ async def demo_context_provider_graph_enriched() -> None:
             password=neo4j_settings.get_password(),
             index_name=neo4j_settings.vector_index_name,
             index_type="vector",
-            mode="graph_enriched",
             retrieval_query=RETRIEVAL_QUERY,
             embedder=embedder,
             top_k=5,
@@ -140,7 +139,7 @@ async def demo_context_provider_graph_enriched() -> None:
                     "When answering, cite the company, relevant products, and risks. "
                     "Be specific and reference the enriched graph data."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with graph-enriched context provider!\n")
                 print("-" * 50)

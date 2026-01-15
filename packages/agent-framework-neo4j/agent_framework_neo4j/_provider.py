@@ -27,18 +27,17 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from ._fulltext import FulltextRetriever
 from ._settings import Neo4jSettings
 
-if sys.version_info >= (3, 11):
-    from typing import Self
+if sys.version_info >= (3, 12):
+    from typing import Self, override
 else:
-    from typing_extensions import Self
+    from typing_extensions import Self, override
 
 
 # Type alias for all supported retrievers
 RetrieverType = VectorRetriever | VectorCypherRetriever | HybridRetriever | HybridCypherRetriever | FulltextRetriever
 
-# Type aliases for Literal types
+# Type alias for index types
 IndexType = Literal["vector", "fulltext", "hybrid"]
-SearchMode = Literal["basic", "graph_enriched"]
 
 # Default context prompt for Neo4j knowledge graph context
 _DEFAULT_CONTEXT_PROMPT = (
@@ -101,8 +100,7 @@ class ProviderConfig(BaseModel):
     index_type: IndexType = "vector"
     fulltext_index_name: str | None = None
 
-    # Mode and retrieval
-    mode: SearchMode = "basic"
+    # Graph enrichment (optional Cypher query for traversal)
     retrieval_query: str | None = None
 
     # Search parameters
@@ -137,13 +135,6 @@ class ProviderConfig(BaseModel):
                 "fulltext_index_name is required when index_type='hybrid'"
             )
 
-        # Graph-enriched mode requires retrieval query
-        if self.mode == "graph_enriched" and not self.retrieval_query:
-            raise ValueError(
-                "retrieval_query is required when mode='graph_enriched'. "
-                "Provide a Cypher query that uses `node` and `score` from index search."
-            )
-
         # Vector/hybrid search requires embedder
         if self.index_type in ("vector", "hybrid") and self.embedder is None:
             raise ValueError(
@@ -156,7 +147,7 @@ class ProviderConfig(BaseModel):
     # These return non-optional types after validation guarantees
 
     def get_retrieval_query(self) -> str:
-        """Get retrieval_query (guaranteed set for graph_enriched mode)."""
+        """Get retrieval_query - raises if not set."""
         if self.retrieval_query is None:
             raise ValueError("retrieval_query not set")
         return self.retrieval_query
@@ -215,12 +206,10 @@ class Neo4jContextProvider(ContextProvider):
         index_type: IndexType = "vector",
         # For hybrid search - optional second index
         fulltext_index_name: str | None = None,
-        # Mode selection
-        mode: SearchMode = "basic",
         # Search parameters
         top_k: int = 5,
         context_prompt: str = _DEFAULT_CONTEXT_PROMPT,
-        # Retrieval query for graph_enriched mode
+        # Graph enrichment - Cypher query for traversal after index search
         retrieval_query: str | None = None,
         # Embedder for vector/hybrid search (neo4j-graphrag Embedder)
         embedder: Embedder | None = None,
@@ -242,12 +231,10 @@ class Neo4jContextProvider(ContextProvider):
             index_type: Type of search - "vector", "fulltext", or "hybrid".
             fulltext_index_name: Fulltext index name for hybrid search.
                 Required when index_type is "hybrid".
-            mode: Search mode - "basic" returns raw results,
-                  "graph_enriched" uses retrieval_query for graph traversal.
             top_k: Number of results to retrieve.
             context_prompt: Prompt prepended to context.
-            retrieval_query: Cypher query for graph enrichment.
-                Required when mode is "graph_enriched".
+            retrieval_query: Optional Cypher query for graph enrichment.
+                If provided, runs after index search to traverse the graph.
                 Must use `node` and `score` variables from index search.
             embedder: neo4j-graphrag Embedder for vector/hybrid search.
                 Required when index_type is "vector" or "hybrid".
@@ -281,7 +268,6 @@ class Neo4jContextProvider(ContextProvider):
             index_name=effective_index_name,
             index_type=index_type,
             fulltext_index_name=fulltext_index_name,
-            mode=mode,
             retrieval_query=retrieval_query,
             top_k=top_k,
             context_prompt=context_prompt,
@@ -293,7 +279,6 @@ class Neo4jContextProvider(ContextProvider):
         # Store commonly accessed values for convenience
         self._index_name = self._config.index_name
         self._index_type = self._config.index_type
-        self._mode = self._config.mode
         self._retrieval_query = self._config.retrieval_query
         self._top_k = self._config.top_k
         self._context_prompt = self._config.context_prompt
@@ -314,8 +299,11 @@ class Neo4jContextProvider(ContextProvider):
         if self._driver is None:
             raise ValueError("Driver not initialized")
 
+        # Determine if graph enrichment is enabled (retrieval_query provided)
+        use_graph_enrichment = self._retrieval_query is not None
+
         if self._index_type == "vector":
-            if self._mode == "graph_enriched":
+            if use_graph_enrichment:
                 return VectorCypherRetriever(
                     driver=self._driver,
                     index_name=self._index_name,
@@ -331,7 +319,7 @@ class Neo4jContextProvider(ContextProvider):
                 )
 
         elif self._index_type == "hybrid":
-            if self._mode == "graph_enriched":
+            if use_graph_enrichment:
                 return HybridCypherRetriever(
                     driver=self._driver,
                     vector_index_name=self._index_name,
@@ -352,10 +340,20 @@ class Neo4jContextProvider(ContextProvider):
             return FulltextRetriever(
                 driver=self._driver,
                 index_name=self._index_name,
-                retrieval_query=self._config.get_retrieval_query() if self._mode == "graph_enriched" else None,
+                retrieval_query=self._retrieval_query,
                 filter_stop_words=self._filter_stop_words,
+                result_formatter=_format_cypher_result if use_graph_enrichment else None,
             )
 
+    @override
+    async def thread_created(self, thread_id: str | None) -> None:
+        """Called when a new conversation thread is created.
+
+        Stub for future thread-specific state initialization.
+        """
+        pass
+
+    @override
     async def __aenter__(self) -> Self:
         """Connect to Neo4j and create retriever."""
         # Get validated connection config (raises if not all set)
@@ -376,6 +374,7 @@ class Neo4jContextProvider(ContextProvider):
 
         return self
 
+    @override
     async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
@@ -454,6 +453,7 @@ class Neo4jContextProvider(ContextProvider):
             top_k=self._top_k,
         )
 
+    @override
     async def invoking(
         self,
         messages: ChatMessage | MutableSequence[ChatMessage],
@@ -469,11 +469,11 @@ class Neo4jContextProvider(ContextProvider):
         if not self.is_connected:
             return Context()
 
-        # Convert to list - try iteration first (MutableSequence), fallback to single item
-        try:
-            messages_list: list[ChatMessage] = list(messages)  # type: ignore[arg-type]
-        except TypeError:
-            messages_list = [messages]  # type: ignore[list-item]
+        # Convert to list - handle both single message and sequence
+        if isinstance(messages, ChatMessage):
+            messages_list = [messages]
+        else:
+            messages_list = list(messages)
 
         # Filter to USER and ASSISTANT messages with text
         filtered_messages = [
@@ -509,6 +509,7 @@ class Neo4jContextProvider(ContextProvider):
 
         return Context(messages=context_messages)
 
+    @override
     async def invoked(
         self,
         request_messages: ChatMessage | Sequence[ChatMessage],

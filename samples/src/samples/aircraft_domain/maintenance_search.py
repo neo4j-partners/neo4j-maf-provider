@@ -87,7 +87,6 @@ async def demo_aircraft_maintenance_search() -> None:
             password=aircraft_password,
             index_name="maintenance_search",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query=MAINTENANCE_RETRIEVAL_QUERY,
             top_k=5,
             context_prompt=(
@@ -117,7 +116,7 @@ async def demo_aircraft_maintenance_search() -> None:
                     "- The severity level of issues\n\n"
                     "Be specific and cite the actual data from the records."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with maintenance search context!\n")
                 print("-" * 50)

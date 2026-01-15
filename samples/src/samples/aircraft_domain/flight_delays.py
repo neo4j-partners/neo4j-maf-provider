@@ -87,7 +87,6 @@ async def demo_aircraft_flight_delays() -> None:
             password=aircraft_password,
             index_name="delay_search",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query=DELAY_RETRIEVAL_QUERY,
             top_k=2,
             message_history_count=1,
@@ -109,7 +108,7 @@ async def demo_aircraft_flight_delays() -> None:
                     "You are a flight operations analyst. Analyze delay records and "
                     "explain causes, durations, and affected flights/routes. Be concise."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with delay analysis context!\n")
                 print("-" * 50)

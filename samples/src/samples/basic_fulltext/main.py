@@ -73,7 +73,7 @@ async def demo_context_provider_basic() -> None:
                     "using the provided knowledge graph context. Be concise and cite "
                     "specific information from the context when available."
                 ),
-                context_providers=[provider],
+                context_provider=provider,
             ) as agent:
                 print("Agent created with context provider!\n")
                 print("-" * 50)

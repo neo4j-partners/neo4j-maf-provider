@@ -62,7 +62,7 @@ def create_agent_client(config: AgentConfig, credential: AzureCliCredential) -> 
     Returns:
         Configured AzureAIClient instance.
     """
-    client_kwargs = {"async_credential": credential}
+    client_kwargs = {"credential": credential}
 
     if config.project_endpoint:
         client_kwargs["project_endpoint"] = config.project_endpoint

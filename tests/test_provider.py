@@ -34,7 +34,7 @@ class TestSettings:
         # Don't test uri/username/password as they may come from env
         settings = Neo4jSettings()
         assert settings.vector_index_name == "chunkEmbeddings"
-        assert settings.fulltext_index_name == "search_chunks"
+        assert settings.fulltext_index_name == "chunkFulltext"
 
 
 class TestProviderInit:
@@ -55,15 +55,6 @@ class TestProviderInit:
                 index_type="vector",
             )
 
-    def test_requires_retrieval_query_for_graph_enriched(self) -> None:
-        """Provider should require retrieval_query when mode is graph_enriched."""
-        with pytest.raises(ValueError, match="retrieval_query is required"):
-            Neo4jContextProvider(
-                index_name="test_index",
-                index_type="fulltext",
-                mode="graph_enriched",
-            )
-
     def test_valid_fulltext_config(self) -> None:
         """Provider should accept valid fulltext configuration."""
         provider = Neo4jContextProvider(
@@ -72,17 +63,16 @@ class TestProviderInit:
         )
         assert provider._index_name == "test_index"
         assert provider._index_type == "fulltext"
-        assert provider._mode == "basic"
+        assert provider._retrieval_query is None
 
-    def test_valid_graph_enriched_config(self) -> None:
-        """Provider should accept valid graph_enriched configuration."""
+    def test_valid_retrieval_query_config(self) -> None:
+        """Provider should accept retrieval_query for graph enrichment."""
         provider = Neo4jContextProvider(
             index_name="test_index",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query="RETURN node.text AS text, score",
         )
-        assert provider._mode == "graph_enriched"
+        assert provider._retrieval_query is not None
         assert "RETURN" in provider._retrieval_query
 
     def test_default_values(self) -> None:
@@ -132,8 +122,8 @@ class TestProviderInit:
             )
 
 
-class TestGraphEnrichedMode:
-    """Test graph-enriched mode functionality."""
+class TestGraphEnrichment:
+    """Test graph enrichment via retrieval_query."""
 
     def test_uses_custom_retrieval_query(self) -> None:
         """Provider should store custom retrieval query."""
@@ -144,7 +134,6 @@ class TestGraphEnrichedMode:
         provider = Neo4jContextProvider(
             index_name="test_index",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query=custom_query,
         )
         assert "FROM_DOCUMENT" in provider._retrieval_query
@@ -162,10 +151,9 @@ class TestGraphEnrichedMode:
         provider = Neo4jContextProvider(
             index_name="chunkEmbeddings",
             index_type="fulltext",
-            mode="graph_enriched",
             retrieval_query=company_risk_query,
         )
-        assert provider._mode == "graph_enriched"
+        assert provider._retrieval_query is not None
         assert "FACES_RISK" in provider._retrieval_query
         assert "collect(DISTINCT risk.name)" in provider._retrieval_query
 

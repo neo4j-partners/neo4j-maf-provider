@@ -8,6 +8,9 @@ resolution-markers = [
     "python_full_version >= '3.15'",
 ]
 
+[options]
+prerelease-mode = "allow"
+
 [manifest]
 members = [
     "agent-framework-neo4j",
@@ -1464,6 +1467,7 @@ source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
+    { name = "agent-framework-neo4j" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1475,6 +1479,7 @@ dev = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "agent-framework-neo4j", editable = "packages/agent-framework-neo4j" },
     { name = "mypy", specifier = ">=1.10.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },

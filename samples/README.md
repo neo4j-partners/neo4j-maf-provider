@@ -34,6 +34,7 @@ uv sync --prerelease=allow
 
 # Deploy Azure infrastructure (from samples directory)
 cd samples
+./scripts/setup_azure.sh   # Configure region (required before first deploy)
 azd up
 ```
 
@@ -42,6 +43,8 @@ This provisions:
 - Storage account for AI project data
 - Application Insights for monitoring
 - Required IAM role assignments
+
+> **Note:** If provisioning fails with a `RequestConflict` error about "provisioning state is not terminal", simply run `azd up` again. This is a transient Azure timing issue—the retry will continue from where it left off.
 
 After provisioning, sync the Azure endpoints to your `.env` file:
 

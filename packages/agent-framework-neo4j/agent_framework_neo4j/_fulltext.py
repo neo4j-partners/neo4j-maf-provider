@@ -193,7 +193,8 @@ class FulltextRetriever(Retriever):
             search_text = query_text
 
         # Build the Cypher query
-        # Note: LIMIT must come before RETURN/retrieval_query in the WITH clause
+        # For retrieval_query: Apply LIMIT twice - once to limit nodes from fulltext search,
+        # and once at the end to limit final rows (retrieval_query MATCH may fan out)
         if self.retrieval_query:
             cypher = f"""
             CALL db.index.fulltext.queryNodes($index_name, $query)
@@ -202,6 +203,7 @@ class FulltextRetriever(Retriever):
             ORDER BY score DESC
             LIMIT $top_k
             {self.retrieval_query}
+            LIMIT $top_k
             """
         else:
             cypher = """
