@@ -1,5 +1,5 @@
 #!/bin/bash
-# Configure Azure region for sample-provider
+# Configure Azure region for Neo4j samples
 # Run this after: az login --use-device-code && azd auth login --use-device-code
 
 set -e
@@ -12,67 +12,58 @@ clean_env_file() {
         return
     fi
 
-    # Check if there are Azure/Service settings to clean
-    if grep -qE '^(AZURE_|SERVICE_|EMBEDDING_)' "$ENV_FILE" 2>/dev/null; then
+    if grep -qE '^(AZURE_|SERVICE_)' "$ENV_FILE" 2>/dev/null; then
         echo ""
-        echo "Found existing Azure configuration in .env that may conflict with new deployment."
+        echo "Found existing Azure configuration in .env."
 
-        # Check for Neo4j settings and preserve them
         if grep -qE '^NEO4J_' "$ENV_FILE" 2>/dev/null; then
-            # Extract Neo4j settings
             grep '^NEO4J_' "$ENV_FILE" > "$ENV_FILE.neo4j.tmp"
+            grep '^AIRCRAFT_NEO4J_' "$ENV_FILE" >> "$ENV_FILE.neo4j.tmp" 2>/dev/null || true
 
-            # Rebuild .env with only Neo4j settings
             cat > "$ENV_FILE" << 'EOF'
-# ============================================
-# User Configuration
-# ============================================
-# Neo4j Connection (configure these manually)
+# Neo4j Connection (preserved)
 
 EOF
             cat "$ENV_FILE.neo4j.tmp" >> "$ENV_FILE"
             rm -f "$ENV_FILE.neo4j.tmp"
 
-            echo "Removed stale Azure config from .env (Neo4j settings preserved)"
+            echo "Removed stale Azure config (Neo4j settings preserved)"
         else
-            # No Neo4j settings, safe to clean Azure config
-            echo "Cleaning stale Azure configuration from .env..."
-            grep -vE '^(AZURE_|SERVICE_|EMBEDDING_)' "$ENV_FILE" > "$ENV_FILE.tmp" || true
+            grep -vE '^(AZURE_|SERVICE_)' "$ENV_FILE" > "$ENV_FILE.tmp" || true
             mv "$ENV_FILE.tmp" "$ENV_FILE"
-            echo "Done"
+            echo "Cleaned stale Azure configuration"
         fi
     fi
 }
 
 echo ""
-echo "Microsoft Foundry Agent Service requires one of these regions:"
-echo "  1) East US 2 (eastus2)"
+echo "Azure AI Foundry serverless models require one of these regions:"
+echo "  1) East US 2 (eastus2) - Recommended"
 echo "  2) Sweden Central (swedencentral)"
 echo "  3) West US 2 (westus2)"
+echo "  4) West US 3 (westus3)"
 echo ""
-read -p "Select a region [1-3] (default: 1): " choice
+read -p "Select a region [1-4] (default: 1): " choice
 choice=${choice:-1}
 
 case $choice in
     1) REGION="eastus2" ;;
     2) REGION="swedencentral" ;;
     3) REGION="westus2" ;;
+    4) REGION="westus3" ;;
     *)
-        echo "Invalid choice. Please enter 1, 2, or 3."
+        echo "Invalid choice. Please enter 1-4."
         exit 1
         ;;
 esac
 
-# Clean stale Azure config from .env before azd init
 clean_env_file
 
-# Remove existing azd environment to start fresh
 if [ -d ".azure" ]; then
     echo "Removing existing .azure directory..."
     rm -rf .azure
 fi
 
-# Initialize new azd environment
 echo "Initializing azd environment..."
 azd init -e dev
 
@@ -83,3 +74,4 @@ echo "Azure configured: $REGION"
 echo ""
 echo "Ready to deploy! Run:"
 echo "   azd up"
+echo "   uv run setup_env.py"

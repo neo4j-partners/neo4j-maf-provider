@@ -4,18 +4,16 @@ Sample applications demonstrating the `agent-framework-neo4j` library with Micro
 
 ## How It Works
 
-These samples use **Microsoft Foundry** (Azure AI) to power the AI agents. The infrastructure provisions:
+These samples use **Azure AI Foundry serverless models** to power the AI agents. The infrastructure is minimal:
 
-- **AI Project** - A Microsoft Foundry project that hosts your AI resources
-- **GPT-4o Model** - Chat model deployment for agent conversations
-- **text-embedding-ada-002** - Embedding model for vector search (converts text to vectors)
-- **Monitoring** - Application Insights and Log Analytics for observability
+- **AI Project** - A Microsoft Foundry project for managing model endpoints
+- **Serverless Models** - Pay-as-you-go model deployments (GPT-4o, text-embedding-ada-002)
 
 When you run a sample, the agent:
 1. Receives your question
 2. The Neo4j Context Provider searches the knowledge graph for relevant information
 3. Retrieved context is injected into the conversation
-4. The GPT-4o model generates a response grounded in the knowledge graph data
+4. The model generates a response grounded in the knowledge graph data
 
 ## Prerequisites
 
@@ -24,27 +22,48 @@ When you run a sample, the agent:
 - Neo4j database with your data (samples use two demo databases)
 - Python 3.10+ and `uv` package manager
 
-## 1. Provision Infrastructure
-
-The infrastructure uses Azure Bicep templates to deploy Microsoft Foundry resources.
+## Quick Start
 
 ```bash
-# Install dependencies (from repo root)
+# 1. Install dependencies (from repo root)
 uv sync --prerelease=allow
 
-# Deploy Azure infrastructure (from samples directory)
+# 2. Configure Azure region (from samples directory)
 cd samples
-./scripts/setup_azure.sh   # Configure region (required before first deploy)
+./scripts/setup_azure.sh
+
+# 3. Deploy Azure infrastructure (includes model deployments)
+azd up
+
+# 4. Sync Azure environment variables
+uv run setup_env.py
+
+# 5. Add Neo4j credentials to .env
+
+# 6. Run samples
+uv run start-samples
+```
+
+## 1. Deploy Azure Infrastructure
+
+First, configure your Azure region:
+
+```bash
+cd samples
+./scripts/setup_azure.sh
+```
+
+Then deploy the infrastructure:
+
+```bash
 azd up
 ```
 
 This provisions:
-- Azure AI Project with model deployments
-- Storage account for AI project data
-- Application Insights for monitoring
+- Azure AI Services account
+- Azure AI Project
+- Model deployments (GPT-4o, text-embedding-ada-002)
 - Required IAM role assignments
-
-> **Note:** If provisioning fails with a `RequestConflict` error about "provisioning state is not terminal", simply run `azd up` again. This is a transient Azure timing issue—the retry will continue from where it left off.
 
 After provisioning, sync the Azure endpoints to your `.env` file:
 
@@ -52,7 +71,12 @@ After provisioning, sync the Azure endpoints to your `.env` file:
 uv run setup_env.py
 ```
 
-This pulls `AZURE_AI_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_NAME`, and `AZURE_AI_EMBEDDING_NAME` from the deployed infrastructure while preserving your Neo4j credentials.
+This populates your `.env` with:
+```
+AZURE_AI_PROJECT_ENDPOINT=https://...
+AZURE_AI_MODEL_NAME=gpt-4o
+AZURE_AI_EMBEDDING_NAME=text-embedding-ada-002
+```
 
 ## 2. Configure Neo4j
 
@@ -129,15 +153,41 @@ samples/
 ├── azure.yaml              # Azure Developer CLI configuration
 ├── setup_env.py            # Sync Azure env vars to .env
 ├── infra/                  # Azure Bicep templates
-│   ├── main.bicep          # Main deployment orchestration
-│   ├── api.bicep           # Optional Container App deployment
-│   └── core/               # Modular templates (AI, security, monitoring)
+│   └── main.bicep          # AI Services, Project, and model deployments
 ├── scripts/                # Setup helper scripts
-│   ├── setup_azure.sh      # Interactive Azure region configuration
-│   └── setup_aircraft_indexes.py  # Create Neo4j indexes for aircraft samples
 ├── basic_fulltext/         # Fulltext search samples
 ├── vector_search/          # Vector similarity samples
 ├── graph_enriched/         # Graph traversal samples
 ├── aircraft_domain/        # Aircraft maintenance samples
 └── shared/                 # Shared utilities (agent config, CLI, logging)
 ```
+
+## Troubleshooting
+
+### "Model deployment not found"
+
+Run `azd up` to deploy the infrastructure including model deployments, then run `uv run setup_env.py` to sync the model names to your `.env` file.
+
+### "Neo4j not configured"
+
+Add the required Neo4j environment variables to `.env`. The samples check for:
+- `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` (financial database)
+- `AIRCRAFT_NEO4J_URI`, `AIRCRAFT_NEO4J_USERNAME`, `AIRCRAFT_NEO4J_PASSWORD` (aircraft database)
+
+### "Azure not configured"
+
+Run `azd up` followed by `uv run setup_env.py` to populate Azure variables.
+
+### "Index not found"
+
+Create the required indexes in your Neo4j database. See `SETUP.md` for details.
+
+## Cost Estimate
+
+With serverless models, you only pay for what you use:
+
+- **Chat model (GPT-4o)**: ~$0.01-0.03 per 1K tokens
+- **Embedding model**: ~$0.0001 per 1K tokens
+- **Running all 8 demos**: approximately $0.05-0.20 total
+
+No idle costs - the AI Services account itself has no ongoing charges when not in use.

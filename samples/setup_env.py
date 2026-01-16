@@ -1,23 +1,15 @@
 import subprocess
-import os
 import sys
 from pathlib import Path
 
-# Variables that are auto-generated from azd (will be updated/overwritten)
+# Variables synced from azd deployment outputs
 AZD_MANAGED_VARS = {
     'AZURE_AI_PROJECT_ENDPOINT',
+    'AZURE_AI_SERVICES_ENDPOINT',
     'AZURE_AI_MODEL_NAME',
     'AZURE_AI_EMBEDDING_NAME',
-    'AZURE_OPENAI_ENDPOINT',
-    'AZURE_AI_AGENT_NAME',
     'AZURE_TENANT_ID',
     'AZURE_RESOURCE_GROUP',
-    'AZURE_CONTAINER_ENVIRONMENT_NAME',
-    'AZURE_CONTAINER_REGISTRY_ENDPOINT',
-    'SERVICE_API_IDENTITY_PRINCIPAL_ID',
-    'SERVICE_API_NAME',
-    'SERVICE_API_URI',
-    'SERVICE_API_ENDPOINTS',
 }
 
 # Variables that should NEVER be modified by this script (user-managed)
@@ -36,6 +28,28 @@ PROTECTED_VARS = {
     'AIRCRAFT_NEO4J_FULLTEXT_INDEX_NAME',
 }
 
+# Placeholder templates for variables that need user configuration
+PLACEHOLDER_SECTIONS = {
+    'neo4j_financial': {
+        'header': '# Neo4j Financial Documents Database (samples 1-5)',
+        'vars': [
+            ('NEO4J_URI', 'neo4j+s://xxx.databases.neo4j.io'),
+            ('NEO4J_USERNAME', 'neo4j'),
+            ('NEO4J_PASSWORD', 'your-password'),
+            ('NEO4J_VECTOR_INDEX_NAME', 'chunkEmbeddings'),
+            ('NEO4J_FULLTEXT_INDEX_NAME', 'search_chunks'),
+        ]
+    },
+    'neo4j_aircraft': {
+        'header': '# Neo4j Aircraft Database (samples 6-8)',
+        'vars': [
+            ('AIRCRAFT_NEO4J_URI', 'neo4j+s://xxx.databases.neo4j.io'),
+            ('AIRCRAFT_NEO4J_USERNAME', 'neo4j'),
+            ('AIRCRAFT_NEO4J_PASSWORD', 'your-password'),
+        ]
+    },
+}
+
 ENV_FILE = Path('.env')
 SAMPLE_FILE = Path('.env.sample')
 
@@ -49,10 +63,8 @@ def parse_env_file(filepath: Path) -> dict[str, str]:
     with open(filepath, 'r') as f:
         for line in f:
             line = line.strip()
-            # Skip empty lines and comments
             if not line or line.startswith('#'):
                 continue
-            # Parse KEY=VALUE (handle values with = in them)
             if '=' in line:
                 key, _, value = line.partition('=')
                 key = key.strip()
@@ -97,11 +109,33 @@ def read_env_with_structure(filepath: Path) -> tuple[list[str], dict[str, int]]:
     return lines, var_positions
 
 
+def add_placeholder_sections(lines: list[str], existing_vars: dict[str, str]) -> list[str]:
+    """
+    Add placeholder sections for missing variables.
+    Does not overwrite existing variables.
+    """
+    for section in PLACEHOLDER_SECTIONS.values():
+        # Check if any vars from this section are missing
+        missing_vars = [
+            (name, default) for name, default in section['vars']
+            if name not in existing_vars
+        ]
+
+        if missing_vars:
+            # Add section header and missing vars
+            if lines and lines[-1].strip():
+                lines.append('')
+            lines.append(section['header'])
+            for var_name, default_value in missing_vars:
+                lines.append(f'{var_name}={default_value}')
+
+    return lines
+
+
 def main():
     print("Fetching environment variables from 'azd'...")
 
     try:
-        # Run azd env get-values
         result = subprocess.run(
             ["azd", "env", "get-values"],
             capture_output=True,
@@ -111,14 +145,13 @@ def main():
 
         azd_vars = parse_azd_output(result.stdout)
 
-        # Filter to only the variables we want to sync (exclude protected vars)
+        # Filter to only the variables we want to sync
         azd_managed = {
             k: v for k, v in azd_vars.items()
             if k in AZD_MANAGED_VARS and k not in PROTECTED_VARS
         }
 
         if ENV_FILE.exists():
-            # Read existing .env preserving structure
             lines, var_positions = read_env_with_structure(ENV_FILE)
             existing_vars = parse_env_file(ENV_FILE)
 
@@ -126,7 +159,6 @@ def main():
             updated_vars = set()
             for var_name, value in azd_managed.items():
                 if var_name in var_positions:
-                    # Update in place
                     line_idx = var_positions[var_name]
                     lines[line_idx] = f'{var_name}={value}'
                     updated_vars.add(var_name)
@@ -134,13 +166,16 @@ def main():
             # Append new azd-managed variables that don't exist
             new_vars = set(azd_managed.keys()) - updated_vars
             if new_vars:
-                # Add a blank line if the file doesn't end with one
                 if lines and lines[-1].strip():
                     lines.append('')
+                lines.append('# Azure (from azd)')
                 for var_name in sorted(new_vars):
                     lines.append(f'{var_name}={azd_managed[var_name]}')
+                    existing_vars[var_name] = azd_managed[var_name]
 
-            # Write back
+            # Add placeholders for missing model and Neo4j variables
+            lines = add_placeholder_sections(lines, existing_vars)
+
             with open(ENV_FILE, 'w') as f:
                 f.write('\n'.join(lines))
                 if lines:
@@ -149,60 +184,59 @@ def main():
             print(f"Updated '{ENV_FILE}'")
 
         else:
-            # No existing .env - create from sample if it exists, otherwise create minimal
-            if SAMPLE_FILE.exists():
-                lines, var_positions = read_env_with_structure(SAMPLE_FILE)
+            # No existing .env - create new with azd vars and placeholders
+            lines = ['# Auto-generated by setup_env.py', '']
 
-                # Update azd-managed variables in the sample
-                for var_name, value in azd_managed.items():
-                    if var_name in var_positions:
-                        line_idx = var_positions[var_name]
-                        lines[line_idx] = f'{var_name}={value}'
-                    else:
-                        lines.append(f'{var_name}={value}')
+            # Add azd-managed variables
+            lines.append('# Azure (from azd)')
+            for key in sorted(azd_managed.keys()):
+                lines.append(f'{key}={azd_managed[key]}')
 
-                with open(ENV_FILE, 'w') as f:
-                    f.write('\n'.join(lines))
-                    if lines:
-                        f.write('\n')
-            else:
-                # Create minimal .env with just azd vars
-                with open(ENV_FILE, 'w') as f:
-                    f.write("# Auto-generated by setup_env.py (from azd)\n")
-                    for key in sorted(azd_managed.keys()):
-                        f.write(f'{key}={azd_managed[key]}\n')
+            # Add all placeholder sections (model names, Neo4j configs)
+            existing_vars = dict(azd_managed)  # Only azd vars exist so far
+            lines = add_placeholder_sections(lines, existing_vars)
+
+            with open(ENV_FILE, 'w') as f:
+                f.write('\n'.join(lines))
+                if lines:
+                    f.write('\n')
 
             print(f"Created '{ENV_FILE}'")
 
-        # Show key variables that were set
+        # Show synced variables
         print("\nAzure variables synced:")
-        for key in ['AZURE_AI_PROJECT_ENDPOINT', 'AZURE_AI_MODEL_NAME',
-                    'AZURE_AI_EMBEDDING_NAME', 'AZURE_OPENAI_ENDPOINT']:
+        for key in ['AZURE_AI_PROJECT_ENDPOINT', 'AZURE_AI_MODEL_NAME', 'AZURE_AI_EMBEDDING_NAME']:
             if key in azd_managed:
                 value = azd_managed[key]
-                # Truncate long values
                 if len(value) > 50:
                     value = value[:47] + "..."
                 print(f"  {key}={value}")
 
-        # Show protected variables that were preserved
-        if ENV_FILE.exists():
-            existing_vars = parse_env_file(ENV_FILE)
-            preserved = [k for k in PROTECTED_VARS if k in existing_vars and existing_vars[k]]
-            if preserved:
-                print("\nProtected variables preserved (not modified):")
-                for key in sorted(preserved):
-                    print(f"  {key}=****")
+        # Check Neo4j configuration status
+        final_vars = parse_env_file(ENV_FILE)
+        neo4j_uri = final_vars.get('NEO4J_URI', '')
+        neo4j_configured = neo4j_uri.startswith('neo4j') and 'xxx' not in neo4j_uri
 
-        print("\nYou can now run the application:")
-        print("  uv run start-agent")
+        print("\nNeo4j configuration:")
+        if neo4j_configured:
+            print(f"  NEO4J_URI={neo4j_uri[:40]}..." if len(neo4j_uri) > 40 else f"  NEO4J_URI={neo4j_uri}")
+        else:
+            print("  NEO4J_URI=<placeholder - update with your credentials>")
+
+        # Remind about next steps
+        if not neo4j_configured:
+            print("\nNext steps:")
+            print("  1. Update Neo4j credentials in .env (replace placeholder values)")
+            print("  2. Run: uv run start-samples")
+        else:
+            print("\nReady to run: uv run start-samples")
 
     except FileNotFoundError:
         print("Error: 'azd' command not found. Please install Azure Developer CLI.")
         sys.exit(1)
     except subprocess.CalledProcessError:
         print("Error: Failed to get azd environment values.")
-        print("  Ensure you have run 'azd up' or 'azd env new' in this directory.")
+        print("  Ensure you have run 'azd up' in this directory.")
         sys.exit(1)
     except Exception as e:
         print(f"Unexpected error: {e}")

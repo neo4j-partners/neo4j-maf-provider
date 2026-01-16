@@ -1,240 +1,178 @@
-// Resource group scoped deployment - requires pre-existing resource group
-// See RESOURCE_GROUP_SCOPED_DEPLOYMENT.md for details
+// Simplified infrastructure for Neo4j Context Provider samples
+// Deploys AI Services account, project, and model deployments
 
 @minLength(1)
 @maxLength(64)
-@description('Name of the the environment which is used to generate a short unique hash used in all resources.')
+@description('Environment name used to generate unique resource names')
 param environmentName string
 
-@description('Location for all resources. Defaults to resource group location.')
+@description('Location for all resources')
 param location string = resourceGroup().location
 
-@description('The Microsoft Foundry Hub resource name. If ommited will be generated')
-param aiProjectName string = ''
-@description('The AI Services resource name. If ommited will be generated')
-param aiServicesName string = ''
-@description('The Azure Storage Account resource name. If ommited will be generated')
-param storageAccountName string = ''
-@description('Id of the user or app to assign application roles')
+@description('Principal ID for role assignments')
 param principalId string = ''
 
+@description('Skip role assignments on redeployment')
+param skipRoleAssignments bool = false
+
 // Chat completion model
-@description('Format of the chat model to deploy')
-@allowed(['Microsoft', 'OpenAI'])
-param agentModelFormat string = 'OpenAI'
-@description('Name of agent to deploy')
-param agentName string = 'arches-agent'
 @description('Name of the chat model to deploy')
-param agentModelName string = 'gpt-4o'
-@description('Name of the model deployment')
-param agentDeploymentName string = 'gpt-4o'
-
+param chatModelName string = 'gpt-4o'
 @description('Version of the chat model to deploy')
-param agentModelVersion string = '2024-08-06'
-
-@description('Sku of the chat deployment')
-param agentDeploymentSku string = 'GlobalStandard'
-
-@description('Capacity of the chat deployment')
-param agentDeploymentCapacity int = 20
+param chatModelVersion string = '2024-08-06'
+@description('SKU for the chat deployment')
+param chatDeploymentSku string = 'GlobalStandard'
+@description('Capacity for the chat deployment')
+param chatDeploymentCapacity int = 20
 
 // Embedding model
-@description('Format of the embedding model to deploy')
-@allowed(['Microsoft', 'OpenAI'])
-param embeddingModelFormat string = 'OpenAI'
 @description('Name of the embedding model to deploy')
 param embeddingModelName string = 'text-embedding-ada-002'
-@description('Name of the embedding model deployment')
-param embeddingDeploymentName string = 'text-embedding-ada-002'
 @description('Version of the embedding model to deploy')
 param embeddingModelVersion string = '2'
-@description('Sku of the embedding deployment')
+@description('SKU for the embedding deployment')
 param embeddingDeploymentSku string = 'GlobalStandard'
-@description('Capacity of the embedding deployment')
+@description('Capacity for the embedding deployment')
 param embeddingDeploymentCapacity int = 120
 
 param templateValidationMode bool = false
-
-@description('Skip role assignments (set to true on redeployment if you get RoleAssignmentExists errors)')
-param skipRoleAssignments bool = false
-
-@description('Deploy Container App infrastructure (set to true for production deployment)')
-param deployContainerApp bool = false
-
-@description('Random seed to be used during generation of new resources suffixes.')
 param seed string = newGuid()
 
-var runnerPrincipalType = templateValidationMode? 'ServicePrincipal' : 'User'
-
-var abbrs = loadJsonContent('./abbreviations.json')
-
-// Use resource group name + environment for uniqueness (no subscription ID needed)
+var tags = { 'azd-env-name': environmentName }
 var resourceToken = templateValidationMode
   ? toLower(uniqueString(resourceGroup().id, environmentName, seed))
   : toLower(uniqueString(resourceGroup().id, environmentName))
+var runnerPrincipalType = templateValidationMode ? 'ServicePrincipal' : 'User'
 
-var tags = { 'azd-env-name': environmentName }
+// Storage account (required by AI Services)
+resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: 'st${resourceToken}'
+  location: location
+  tags: tags
+  kind: 'StorageV2'
+  sku: { name: 'Standard_LRS' }
+  properties: {
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+  }
+}
 
-var aiChatModel = [
-  {
-    name: agentDeploymentName
+// AI Services account (Foundry resource)
+resource aiServices 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
+  name: 'ai-${resourceToken}'
+  location: location
+  tags: tags
+  kind: 'AIServices'
+  sku: { name: 'S0' }
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    allowProjectManagement: true
+    customSubDomainName: 'ai-${resourceToken}'
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// AI Project (for managing serverless endpoints)
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' = {
+  parent: aiServices
+  name: 'proj-${resourceToken}'
+  location: location
+  tags: tags
+  identity: { type: 'SystemAssigned' }
+  properties: {
+    displayName: 'Neo4j Samples Project'
+    description: 'Project for Neo4j Context Provider samples'
+  }
+}
+
+// Chat model deployment (gpt-4o)
+resource chatDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: aiServices
+  name: chatModelName
+  properties: {
     model: {
-      format: agentModelFormat
-      name: agentModelName
-      version: agentModelVersion
-    }
-    sku: {
-      name: agentDeploymentSku
-      capacity: agentDeploymentCapacity
+      format: 'OpenAI'
+      name: chatModelName
+      version: chatModelVersion
     }
   }
-]
+  sku: {
+    name: chatDeploymentSku
+    capacity: chatDeploymentCapacity
+  }
+}
 
-var aiEmbeddingModel = [
-  {
-    name: embeddingDeploymentName
+// Embedding model deployment (text-embedding-ada-002)
+resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
+  parent: aiServices
+  name: embeddingModelName
+  dependsOn: [chatDeployment] // Deploy sequentially to avoid conflicts
+  properties: {
     model: {
-      format: embeddingModelFormat
+      format: 'OpenAI'
       name: embeddingModelName
       version: embeddingModelVersion
     }
-    sku: {
-      name: embeddingDeploymentSku
-      capacity: embeddingDeploymentCapacity
+  }
+  sku: {
+    name: embeddingDeploymentSku
+    capacity: embeddingDeploymentCapacity
+  }
+}
+
+// Storage connection for AI Services
+resource storageConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  name: 'storage-connection'
+  parent: aiServices
+  properties: {
+    category: 'AzureStorageAccount'
+    target: storageAccount.properties.primaryEndpoints.blob
+    authType: 'AAD'
+    isSharedToAll: true
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: storageAccount.id
     }
   }
-]
+}
 
-var aiDeployments = concat(aiChatModel, aiEmbeddingModel)
-
-// AI environment (deploys within current resource group)
-module ai 'core/host/ai-environment.bicep' = {
-  name: 'ai'
-  params: {
-    location: location
-    tags: tags
-    storageAccountName: !empty(storageAccountName)
-      ? storageAccountName
-      : '${abbrs.storageStorageAccounts}${resourceToken}'
-    aiServicesName: !empty(aiServicesName) ? aiServicesName : 'aoai-${resourceToken}'
-    aiProjectName: !empty(aiProjectName) ? aiProjectName : 'proj-${resourceToken}'
-    aiServiceModelDeployments: aiDeployments
-    // Monitoring enabled
-    logAnalyticsName: 'log-${resourceToken}'
-    applicationInsightsName: 'appi-${resourceToken}'
-    appInsightConnectionName: 'appinsights-connection'
-    // No search
-    searchServiceName: ''
-    aoaiConnectionName: 'aoai-connection'
-    skipRoleAssignments: skipRoleAssignments
+// Role: Storage Blob Data Contributor for AI Services
+resource aiStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments) {
+  name: guid(resourceGroup().id, aiServices.id, 'storage-contributor')
+  scope: storageAccount
+  properties: {
+    principalType: 'ServicePrincipal'
+    principalId: aiServices.identity.principalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   }
 }
 
-var openAIEndpoint = ai.outputs.openAIEndpoint
-var aiProjectEndpoint = ai.outputs.aiProjectEndpoint
-
-// Container apps host (including container registry)
-module containerApps 'core/host/container-apps.bicep' = if (deployContainerApp) {
-  name: 'container-apps'
-  params: {
-    name: 'app'
-    location: location
-    containerRegistryName: '${abbrs.containerRegistryRegistries}${resourceToken}'
-    tags: tags
-    containerAppsEnvironmentName: 'containerapps-env-${resourceToken}'
-    logAnalyticsWorkspaceName: '' // No Log Analytics
-  }
-}
-
-// API app
-module api 'api.bicep' = if (deployContainerApp) {
-  name: 'api'
-  params: {
-    name: 'ca-api-${resourceToken}'
-    location: location
-    tags: tags
-    identityName: '${abbrs.managedIdentityUserAssignedIdentities}api-${resourceToken}'
-    containerAppsEnvironmentName: containerApps.outputs.environmentName
-    containerRegistryName: containerApps.outputs.registryName
-    azureAIProjectEndpoint: aiProjectEndpoint
-    azureOpenAIEndpoint: openAIEndpoint
-    azureModelDeploymentName: agentDeploymentName
-    agentName: agentName
-    skipRoleAssignment: skipRoleAssignments
-  }
-}
-
-// Role assignments for the deploying user (skip on redeployment if needed)
-module userRoleAzureAIDeveloper 'core/security/role.bicep' = if (!skipRoleAssignments) {
-  name: 'user-role-azureai-developer'
-  params: {
+// Role: Azure AI Developer for deploying user
+resource userAIDeveloper 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(principalId)) {
+  name: guid(resourceGroup().id, principalId, 'ai-developer')
+  properties: {
     principalType: runnerPrincipalType
     principalId: principalId
-    roleDefinitionId: '64702f94-c441-49e6-a78b-ef80e0188fee' // Azure AI Developer
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '64702f94-c441-49e6-a78b-ef80e0188fee')
   }
 }
 
-module userCognitiveServicesUser 'core/security/role.bicep' = if (!skipRoleAssignments) {
-  name: 'user-role-cognitive-services-user'
-  params: {
+// Role: Cognitive Services User for deploying user
+resource userCognitiveServices 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!skipRoleAssignments && !empty(principalId)) {
+  name: guid(resourceGroup().id, principalId, 'cognitive-services-user')
+  properties: {
     principalType: runnerPrincipalType
     principalId: principalId
-    roleDefinitionId: 'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
   }
 }
 
-module userAzureAIUser 'core/security/role.bicep' = if (!skipRoleAssignments) {
-  name: 'user-role-azure-ai-user'
-  params: {
-    principalType: runnerPrincipalType
-    principalId: principalId
-    roleDefinitionId: '53ca6127-db72-4b80-b1b0-d745d6d5456d' // Azure AI User
-  }
-}
-
-// Role assignments for the API backend (managed identity)
-module backendAzureAIUser 'core/security/role.bicep' = if (!skipRoleAssignments && deployContainerApp) {
-  name: 'backend-role-azure-ai-user'
-  params: {
-    principalType: 'ServicePrincipal'
-    principalId: api.outputs.SERVICE_API_IDENTITY_PRINCIPAL_ID
-    roleDefinitionId: '53ca6127-db72-4b80-b1b0-d745d6d5456d' // Azure AI User
-  }
-}
-
-module backendCognitiveServicesUser 'core/security/role.bicep' = if (!skipRoleAssignments && deployContainerApp) {
-  name: 'backend-role-cognitive-services-user'
-  params: {
-    principalType: 'ServicePrincipal'
-    principalId: api.outputs.SERVICE_API_IDENTITY_PRINCIPAL_ID
-    roleDefinitionId: 'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
-  }
-}
-
-module backendRoleAzureAIDeveloper 'core/security/role.bicep' = if (!skipRoleAssignments && deployContainerApp) {
-  name: 'backend-role-azureai-developer'
-  params: {
-    principalType: 'ServicePrincipal'
-    principalId: api.outputs.SERVICE_API_IDENTITY_PRINCIPAL_ID
-    roleDefinitionId: '64702f94-c441-49e6-a78b-ef80e0188fee' // Azure AI Developer
-  }
-}
-
+// Outputs for setup_env.py
 output AZURE_RESOURCE_GROUP string = resourceGroup().name
-
-// Outputs required for local development server (Agent Framework with Foundry)
 output AZURE_TENANT_ID string = tenant().tenantId
-output AZURE_AI_PROJECT_ENDPOINT string = aiProjectEndpoint
-output AZURE_AI_MODEL_NAME string = agentDeploymentName
-output AZURE_AI_EMBEDDING_NAME string = embeddingDeploymentName
-output AZURE_AI_AGENT_NAME string = agentName
-// Legacy endpoint (for fallback or direct OpenAI access)
-output AZURE_OPENAI_ENDPOINT string = openAIEndpoint
+output AZURE_AI_PROJECT_ENDPOINT string = aiProject.properties.endpoints['AI Foundry API']
+output AZURE_AI_SERVICES_ENDPOINT string = aiServices.properties.endpoint
 
-// Outputs required by azd for ACA (empty when deployContainerApp=false)
-output AZURE_CONTAINER_ENVIRONMENT_NAME string = deployContainerApp ? containerApps.outputs.environmentName : ''
-output SERVICE_API_IDENTITY_PRINCIPAL_ID string = deployContainerApp ? api.outputs.SERVICE_API_IDENTITY_PRINCIPAL_ID : ''
-output SERVICE_API_NAME string = deployContainerApp ? api.outputs.SERVICE_API_NAME : ''
-output SERVICE_API_URI string = deployContainerApp ? api.outputs.SERVICE_API_URI : ''
-output SERVICE_API_ENDPOINTS array = deployContainerApp ? ['${api.outputs.SERVICE_API_URI}'] : []
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = deployContainerApp ? containerApps.outputs.registryLoginServer : ''
+// Model deployment names
+output AZURE_AI_MODEL_NAME string = chatDeployment.name
+output AZURE_AI_EMBEDDING_NAME string = embeddingDeployment.name
