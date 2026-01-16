@@ -140,14 +140,25 @@ See [samples/README.md](samples/README.md) for complete setup instructions inclu
 
 ## Available Samples
 
-| Sample | Search Type | Context Provider Usage |
-|--------|-------------|------------------------|
-| **Basic Fulltext** | Fulltext (BM25) | Uses `index_type="fulltext"` to search Neo4j fulltext indexes with keyword matching |
-| **Vector Search** | Vector | Uses `index_type="vector"` with an embedder to perform semantic similarity search |
-| **Graph-Enriched** | Vector + Cypher | Uses `index_type="vector"` with `retrieval_query` to traverse graph relationships after initial vector search |
-| **Aircraft Maintenance** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to enrich maintenance events with aircraft/system/component context |
-| **Flight Delays** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to enrich delay records with flight/aircraft/route context |
-| **Component Health** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to traverse component → system → aircraft hierarchy |
+### Financial Documents Database
+
+These samples use a Neo4j database containing SEC filings with Company, Document, Chunk, RiskFactor, and Product nodes.
+
+| Sample | Description | Context Provider Configuration |
+|--------|-------------|-------------------------------|
+| [**Basic Fulltext**](samples/src/samples/basic_fulltext/main.py) | Demonstrates keyword-based search using BM25 scoring. Searches document chunks for terms like "Microsoft products" or "risk factors" and returns matching text. | `index_type="fulltext"`, `index_name="search_chunks"`, `top_k=3` |
+| [**Vector Search**](samples/src/samples/vector_search/main.py) | Demonstrates semantic similarity search using Azure AI embeddings. Finds conceptually related content even when exact keywords don't match. | `index_type="vector"`, `index_name="chunkEmbeddings"`, requires `AzureAIEmbedder`, `top_k=5` |
+| [**Graph-Enriched**](samples/src/samples/graph_enriched/main.py) | Combines vector search with graph traversal. After finding relevant chunks, traverses `Chunk → Document ← Company → RiskFactor/Product` relationships to return company context, products, and risk factors alongside the matched text. | `index_type="vector"`, `retrieval_query` with Cypher traversal, `top_k=5` |
+
+### Aircraft Domain Database
+
+These samples use a separate Neo4j database with Aircraft, System, Component, MaintenanceEvent, Flight, Delay, and Airport nodes.
+
+| Sample | Description | Context Provider Configuration |
+|--------|-------------|-------------------------------|
+| [**Aircraft Maintenance**](samples/src/samples/aircraft_domain/maintenance_search.py) | Searches maintenance event records for faults (vibration, electrical, sensor drift). Graph traversal enriches results with the affected aircraft tail number, system name, and component, enabling questions like "What maintenance issues involve vibration?" | `index_type="fulltext"`, `index_name="maintenance_search"`, `retrieval_query` traverses `MaintenanceEvent ← Component ← System ← Aircraft` |
+| [**Flight Delays**](samples/src/samples/aircraft_domain/flight_delays.py) | Searches flight delay records by cause (weather, security). Graph traversal enriches results with flight number, aircraft, and route (origin → destination airports), enabling operations analysis like "What flights were delayed due to weather?" | `index_type="fulltext"`, `index_name="delay_search"`, `retrieval_query` traverses `Delay ← Flight → Aircraft/Airport`, `top_k=2` |
+| [**Component Health**](samples/src/samples/aircraft_domain/component_health.py) | Searches aircraft components by name/type (turbine, fuel pump). Graph traversal enriches results with the parent system, aircraft, and maintenance event count, enabling health analysis like "What turbine components have maintenance issues?" | `index_type="fulltext"`, `index_name="component_search"`, `retrieval_query` traverses `Component ← System ← Aircraft` and counts `MaintenanceEvent` nodes |
 
 ## Development
 
