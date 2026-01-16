@@ -129,6 +129,9 @@ fabric.properties
 .azure/
 *.azureauth
 
+# UV workspace package builds
+packages/**/dist/
+
 # Project specific
 *.swp
 *.swo
