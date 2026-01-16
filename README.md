@@ -45,9 +45,39 @@ This provider connects AI agents to Neo4j knowledge graphs. It supports:
 - **Index-driven configuration** - Works with any Neo4j index; configure `index_name` and `index_type`
 - **Configurable graph enrichment** - Custom Cypher queries traverse relationships after initial search
 
+## Installation
+
+```bash
+pip install agent-framework-neo4j --pre
+
+# With Azure AI embeddings support
+pip install agent-framework-neo4j[azure] --pre
+```
+
+## Setting up Neo4j
+
+You have several options to set up Neo4j:
+
+### Option A: Neo4j AuraDB (Recommended)
+
+Get a free cloud instance at https://neo4j.com/cloud/aura-free/
+
+### Option B: Local Neo4j with Docker
+
+```bash
+docker run --name neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -e NEO4J_AUTH=neo4j/password \
+  -d neo4j:5
+```
+
+### Option C: Neo4j Desktop
+
+Download from https://neo4j.com/download/
+
 ## Quick Start
 
-### Install Dependencies
+### Development Setup
 
 ```bash
 # Clone the repository
@@ -88,36 +118,16 @@ See [samples/README.md](samples/README.md) for complete setup instructions inclu
 
 ## Publishing to PyPI
 
-### Prerequisites
-
-1. PyPI account with API token
-2. All tests passing
-3. Version number updated in `packages/agent-framework-neo4j/pyproject.toml`
-
-### Build and Publish
-
 ```bash
-# Build the package
+# Bump version
+./scripts/version-bump.sh patch   # or major/minor
+
+# Build and publish
 uv build --package agent-framework-neo4j
-
-# Verify the build artifacts
-ls dist/
-# Should show: agent_framework_neo4j-0.1.0.tar.gz and agent_framework_neo4j-0.1.0-py3-none-any.whl
-
-# Publish to PyPI
-uv publish --package agent-framework-neo4j
+uv publish --token $PYPI_TOKEN
 ```
 
-### Version Management
-
-Update the version in `packages/agent-framework-neo4j/pyproject.toml`:
-```toml
-[project]
-name = "agent-framework-neo4j"
-version = "0.1.0"  # Update this
-```
-
-Also update `__version__` in `packages/agent-framework-neo4j/agent_framework_neo4j/__init__.py`.
+See [docs/PUBLISH.md](docs/PUBLISH.md) for complete publishing guide including authentication options and TestPyPI testing.
 
 ## Project Structure
 
@@ -139,7 +149,7 @@ neo4j-maf-provider/
 The core library providing Neo4j context for Microsoft Agent Framework agents.
 
 ```bash
-pip install agent-framework-neo4j
+pip install agent-framework-neo4j --pre
 ```
 
 **Public API:**
@@ -180,6 +190,18 @@ Demo applications in `samples/` showing the library in action:
 - Aircraft domain examples
 
 See [samples/README.md](samples/README.md) for setup and usage.
+
+## Documentation
+
+**Project docs:**
+- [Architecture](docs/architecture.md) - Design principles, search flow, components
+- [Publishing Guide](docs/PUBLISH.md) - Build and publish to PyPI
+
+**External resources:**
+- [Microsoft Agent Framework](https://aka.ms/agent-framework)
+- [Agent Framework Python Packages](https://github.com/microsoft/agent-framework/tree/main/python/packages)
+- [Neo4j GraphRAG Python](https://neo4j.com/docs/neo4j-graphrag-python/)
+- [Neo4j AuraDB](https://neo4j.com/cloud/aura/)
 
 ## License
 
