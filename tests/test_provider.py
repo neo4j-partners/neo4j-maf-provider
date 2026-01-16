@@ -233,3 +233,249 @@ class TestHybridMode:
                 index_name="test_vector_index",
                 index_type="hybrid",
             )
+
+
+class TestMemoryConfiguration:
+    """Test memory configuration options."""
+
+    def test_memory_disabled_by_default(self) -> None:
+        """Memory should be disabled by default."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+        )
+        assert provider._memory_enabled is False
+
+    def test_memory_requires_scope_filter(self) -> None:
+        """Memory should require at least one scope filter when enabled."""
+        with pytest.raises(ValueError, match="Memory requires at least one scope filter"):
+            Neo4jContextProvider(
+                index_name="test_index",
+                index_type="fulltext",
+                memory_enabled=True,
+            )
+
+    def test_memory_enabled_with_user_id(self) -> None:
+        """Memory should work with user_id scope."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider._memory_enabled is True
+        assert provider.user_id == "test_user"
+
+    def test_memory_enabled_with_agent_id(self) -> None:
+        """Memory should work with agent_id scope."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            agent_id="test_agent",
+        )
+        assert provider._memory_enabled is True
+        assert provider.agent_id == "test_agent"
+
+    def test_memory_enabled_with_application_id(self) -> None:
+        """Memory should work with application_id scope."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            application_id="test_app",
+        )
+        assert provider._memory_enabled is True
+        assert provider.application_id == "test_app"
+
+    def test_memory_enabled_with_thread_id(self) -> None:
+        """Memory should work with thread_id scope."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            thread_id="test_thread",
+        )
+        assert provider._memory_enabled is True
+        assert provider.thread_id == "test_thread"
+
+    def test_custom_memory_label(self) -> None:
+        """Memory should accept custom node label."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            memory_label="ConversationMemory",
+        )
+        assert provider._memory_label == "ConversationMemory"
+
+    def test_default_memory_label(self) -> None:
+        """Memory should have default label 'Memory'."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider._memory_label == "Memory"
+
+    def test_custom_memory_roles(self) -> None:
+        """Memory should accept custom roles to store."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            memory_roles=("user", "assistant", "system"),
+        )
+        assert provider._memory_roles == {"user", "assistant", "system"}
+
+    def test_default_memory_roles(self) -> None:
+        """Memory should default to storing user and assistant roles."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider._memory_roles == {"user", "assistant"}
+
+
+class TestThreadIdHandling:
+    """Test thread ID handling for memory scoping."""
+
+    def test_effective_thread_id_uses_configured_thread_id(self) -> None:
+        """Effective thread ID should use configured thread_id by default."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            thread_id="configured_thread",
+        )
+        assert provider._effective_thread_id == "configured_thread"
+
+    def test_effective_thread_id_uses_per_operation_when_scoped(self) -> None:
+        """Effective thread ID should use per-operation thread when scoped."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            scope_to_per_operation_thread_id=True,
+        )
+        provider._per_operation_thread_id = "per_op_thread"
+        assert provider._effective_thread_id == "per_op_thread"
+
+    @pytest.mark.asyncio
+    async def test_thread_created_captures_thread_id(self) -> None:
+        """thread_created should capture the thread ID."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        await provider.thread_created("new_thread_123")
+        assert provider._per_operation_thread_id == "new_thread_123"
+
+    @pytest.mark.asyncio
+    async def test_thread_created_does_not_overwrite_existing(self) -> None:
+        """thread_created should not overwrite existing thread ID."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        await provider.thread_created("first_thread")
+        await provider.thread_created("second_thread")
+        assert provider._per_operation_thread_id == "first_thread"
+
+    @pytest.mark.asyncio
+    async def test_thread_created_raises_on_conflict_when_scoped(self) -> None:
+        """thread_created should raise when conflicting thread IDs and scoped."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            scope_to_per_operation_thread_id=True,
+        )
+        await provider.thread_created("first_thread")
+        with pytest.raises(ValueError, match="can only be used with one thread"):
+            await provider.thread_created("different_thread")
+
+
+class TestInvoked:
+    """Test the invoked method for memory storage."""
+
+    @pytest.mark.asyncio
+    async def test_invoked_does_nothing_when_memory_disabled(self) -> None:
+        """Invoked should do nothing when memory is disabled."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+        )
+        message = ChatMessage(role=Role.USER, text="test message")
+        # Should not raise any errors
+        await provider.invoked(message)
+
+    @pytest.mark.asyncio
+    async def test_invoked_does_nothing_when_not_connected(self) -> None:
+        """Invoked should do nothing when not connected to Neo4j."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        message = ChatMessage(role=Role.USER, text="test message")
+        # Should not raise any errors (not connected, so no storage attempt)
+        await provider.invoked(message)
+
+
+class TestScopeFilterCypher:
+    """Test the scope filter Cypher generation."""
+
+    def test_builds_user_id_filter(self) -> None:
+        """Should build correct filter for user_id."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        where_clause, params = provider._build_scope_filter_cypher()
+        assert "m.user_id = $user_id" in where_clause
+        assert params["user_id"] == "test_user"
+
+    def test_builds_combined_filters(self) -> None:
+        """Should build correct combined filter for multiple scopes."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            agent_id="test_agent",
+            application_id="test_app",
+        )
+        where_clause, params = provider._build_scope_filter_cypher()
+        assert "m.user_id = $user_id" in where_clause
+        assert "m.agent_id = $agent_id" in where_clause
+        assert "m.application_id = $application_id" in where_clause
+        assert params["user_id"] == "test_user"
+        assert params["agent_id"] == "test_agent"
+        assert params["application_id"] == "test_app"
+
+    def test_includes_effective_thread_id(self) -> None:
+        """Should include effective thread ID in filter."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            thread_id="test_thread",
+        )
+        where_clause, params = provider._build_scope_filter_cypher()
+        assert "m.thread_id = $thread_id" in where_clause
+        assert params["thread_id"] == "test_thread"
