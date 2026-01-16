@@ -25,6 +25,14 @@ Context providers work behind the scenes to:
 2. **Inject that information** into the agent's context before it responds
 3. **Update state or memory** after the agent responds
 
+---
+
+**This README covers running the samples.** For other topics:
+- **Building and publishing** the library to PyPI: [docs/PUBLISH.md](docs/PUBLISH.md)
+- **Detailed architecture** and design principles: [docs/architecture.md](docs/architecture.md)
+
+---
+
 ## The Neo4j Context Provider
 
 This provider connects AI agents to Neo4j knowledge graphs. It supports:
@@ -75,9 +83,11 @@ docker run --name neo4j \
 
 Download from https://neo4j.com/download/
 
-## Quick Start
+## Getting Started with the Neo4j MAF Provider
 
-### Development Setup
+Follow these steps to run the sample applications and see the context provider in action.
+
+### Step 1: Install Dependencies
 
 ```bash
 # Clone the repository
@@ -87,6 +97,59 @@ cd neo4j-maf-provider
 # Install all workspace packages
 uv sync --prerelease=allow
 ```
+
+### Step 2: Provision Azure Infrastructure
+
+The samples use Azure AI Foundry serverless models. You need to provision a Foundry project and deploy models.
+
+```bash
+cd samples
+
+# Configure your Azure region
+./scripts/setup_azure.sh
+
+# Deploy Azure infrastructure (creates AI Project + model deployments)
+azd up
+
+# Sync Azure environment variables to .env
+uv run setup_env.py
+```
+
+This provisions:
+- **Azure AI Project** - A Microsoft Foundry project for managing model endpoints
+- **Serverless Models** - GPT-4o for chat, text-embedding-ada-002 for embeddings
+
+### Step 3: Configure Neo4j
+
+Add your Neo4j database credentials to `samples/.env`:
+
+```
+NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=your-password
+```
+
+### Step 4: Run the Samples
+
+```bash
+uv run start-samples      # Interactive menu
+uv run start-samples 3    # Run specific demo
+```
+
+See [samples/README.md](samples/README.md) for complete setup instructions including prerequisites, database configuration, and troubleshooting.
+
+## Available Samples
+
+| Sample | Search Type | Context Provider Usage |
+|--------|-------------|------------------------|
+| **Basic Fulltext** | Fulltext (BM25) | Uses `index_type="fulltext"` to search Neo4j fulltext indexes with keyword matching |
+| **Vector Search** | Vector | Uses `index_type="vector"` with an embedder to perform semantic similarity search |
+| **Graph-Enriched** | Vector + Cypher | Uses `index_type="vector"` with `retrieval_query` to traverse graph relationships after initial vector search |
+| **Aircraft Maintenance** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to enrich maintenance events with aircraft/system/component context |
+| **Flight Delays** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to enrich delay records with flight/aircraft/route context |
+| **Component Health** | Fulltext + Cypher | Uses `index_type="fulltext"` with `retrieval_query` to traverse component → system → aircraft hierarchy |
+
+## Development
 
 ### Run Tests
 
@@ -107,15 +170,6 @@ uv run mypy packages/agent-framework-neo4j/agent_framework_neo4j
 uv run ruff check packages/agent-framework-neo4j/agent_framework_neo4j
 ```
 
-## Using with Samples
-
-The `samples/` directory contains demo applications that show the provider in action. Samples are self-contained with their own Azure infrastructure setup.
-
-See [samples/README.md](samples/README.md) for complete setup instructions including:
-- Prerequisites and Azure subscription requirements
-- Neo4j database configuration
-- Available samples and what they demonstrate
-
 ## Publishing to PyPI
 
 ```bash
@@ -127,7 +181,7 @@ uv build --package agent-framework-neo4j
 uv publish --token $PYPI_TOKEN
 ```
 
-See [docs/PUBLISH.md](docs/PUBLISH.md) for complete publishing guide including authentication options and TestPyPI testing.
+See [docs/PUBLISH.md](docs/PUBLISH.md) for the complete publishing guide including authentication options and TestPyPI testing.
 
 ## Project Structure
 
