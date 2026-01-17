@@ -104,7 +104,7 @@ async def demo_semantic_search() -> None:
                 print(f"\n[Query {i}] {query}\n")
 
                 # Perform search using the provider's internal retriever
-                result = await provider._search(query)
+                result = await provider._execute_search(query)
 
                 if not result.items:
                     print("  No results found.\n")

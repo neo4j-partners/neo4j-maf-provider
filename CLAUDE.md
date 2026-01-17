@@ -77,6 +77,8 @@ uv publish --package agent-framework-neo4j  # Publish to PyPI
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | `Neo4jContextProvider` | `packages/.../agent_framework_neo4j/_provider.py` | Main context provider implementing `ContextProvider` interface |
+| `ProviderConfig` | `packages/.../agent_framework_neo4j/_config.py` | Pydantic configuration validation |
+| `MemoryManager` | `packages/.../agent_framework_neo4j/_memory.py` | Memory storage and retrieval operations |
 | `Neo4jSettings` | `packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Neo4j credentials |
 | `AzureAISettings` | `packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Azure AI |
 | `AzureAIEmbedder` | `packages/.../agent_framework_neo4j/_embedder.py` | Azure AI embedding integration |
@@ -90,8 +92,10 @@ uv publish --package agent-framework-neo4j  # Publish to PyPI
 4. Execute search based on `index_type`:
    - **vector**: Embed query → `db.index.vector.queryNodes()`
    - **fulltext**: Optional stop word filtering → `db.index.fulltext.queryNodes()`
-5. If `mode="graph_enriched"`: Execute custom `retrieval_query` Cypher
-6. Format results → Return `Context(messages=[...])`
+   - **hybrid**: Both vector and fulltext search, combined scores
+5. If `retrieval_query` provided: Execute custom Cypher for graph traversal
+6. If `memory_enabled`: Search Memory nodes for relevant past conversations
+7. Format results → Return `Context(messages=[...])`
 
 ### Samples
 
@@ -130,15 +134,15 @@ provider = Neo4jContextProvider(
     username=settings.username,
     password=settings.get_password(),
     index_name="chunkEmbeddings",
-    index_type="vector",  # or "fulltext"
-    mode="graph_enriched",  # or "basic"
+    index_type="vector",  # or "fulltext" or "hybrid"
+    embedder=my_embedder,
+    top_k=5,
+    # Optional: graph enrichment via custom Cypher
     retrieval_query="""
         MATCH (node)-[:FROM_DOCUMENT]->(doc)
         RETURN node.text AS text, score, doc.title AS title
         ORDER BY score DESC
     """,
-    embedder=my_embedder,
-    top_k=5,
 )
 
 async with provider:

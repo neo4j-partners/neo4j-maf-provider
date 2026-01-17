@@ -97,8 +97,9 @@ AI model responds with knowledge from the graph
 | Component | File | Purpose |
 |-----------|------|---------|
 | `Neo4jContextProvider` | `_provider.py` | Main provider implementing `ContextProvider` interface |
-| `ProviderConfig` | `_provider.py` | Pydantic model for configuration validation |
-| `ConnectionConfig` | `_provider.py` | Pydantic model for connection parameters |
+| `ProviderConfig` | `_config.py` | Pydantic model for configuration validation |
+| `MemoryManager` | `_memory.py` | Handles memory storage and retrieval operations |
+| `ScopeFilter` | `_memory.py` | Dataclass for memory scoping parameters |
 | `Neo4jSettings` | `_settings.py` | Environment-based settings with Pydantic |
 | `AzureAISettings` | `_settings.py` | Azure AI embeddings configuration |
 | `AzureAIEmbedder` | `_embedder.py` | neo4j-graphrag compatible embedder for Azure AI |
@@ -108,12 +109,19 @@ AI model responds with knowledge from the graph
 
 | Method | Purpose |
 |--------|---------|
-| `invoked()` | Store conversation messages as Memory nodes |
-| `_store_memories()` | Create Memory nodes with metadata and optional embeddings |
-| `_search_memories()` | Query Memory nodes with scoping filters |
-| `_build_scope_filter_cypher()` | Generate WHERE clause for scoping |
+| `invoked()` | Store conversation messages via `MemoryManager` |
+| `_search_memories()` | Query Memory nodes via `MemoryManager` |
+| `_get_scope_filter()` | Build `ScopeFilter` from provider state |
 | `_effective_thread_id` | Resolve active thread ID (property) |
 | `_validate_per_operation_thread_id()` | Prevent cross-thread conflicts |
+
+**Methods in `MemoryManager`:**
+
+| Method | Purpose |
+|--------|---------|
+| `ensure_indexes()` | Create memory indexes (lazy initialization) |
+| `store()` | Create Memory nodes with metadata and embeddings |
+| `search()` | Query Memory nodes with scoping filters |
 
 ### Integration with neo4j-graphrag
 
@@ -403,9 +411,9 @@ For understanding memory patterns in Microsoft Agent Framework:
 
 ## Future Work
 
-### Hierarchical Memory (Phase 2)
+### Hierarchical Memory 
 
-The current memory implementation (Phase 1) provides basic conversation memory. Phase 2 will add hierarchical memory organization:
+The current memory implementation  provides basic conversation memory. Phase 2 will add hierarchical memory organization:
 
 **Memory Hierarchy:**
 1. **Message Level** (Base Layer) - Individual messages (implemented in Phase 1)
@@ -421,7 +429,6 @@ The current memory implementation (Phase 1) provides basic conversation memory. 
 - Hierarchy traversal in retrieval queries
 - Memory consolidation (merge old messages into summaries)
 
-See `MEM_EXAMPLE.md` for the full proposal.
 
 ### Additional Retrievers
 

@@ -13,28 +13,66 @@ provider = Neo4jContextProvider(
     password="password",
     index_name="chunkEmbeddings",
     index_type="vector",  # "vector", "fulltext", or "hybrid"
-    mode="basic",  # "basic" or "graph_enriched"
     top_k=5,
     embedder=my_embedder,  # Required for vector/hybrid
+    # Optional: graph enrichment via custom Cypher
+    retrieval_query="""
+        MATCH (node)-[:FROM_DOCUMENT]->(doc)
+        RETURN node.text AS text, score, doc.title AS title
+        ORDER BY score DESC
+    """,
 )
 ```
 
-### Parameters
+### Connection Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `uri` | `str \| None` | Neo4j connection URI. Falls back to `NEO4J_URI` env var. |
 | `username` | `str \| None` | Neo4j username. Falls back to `NEO4J_USERNAME` env var. |
 | `password` | `str \| None` | Neo4j password. Falls back to `NEO4J_PASSWORD` env var. |
+
+### Index Configuration
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
 | `index_name` | `str` | Name of the Neo4j index to query. Required. |
 | `index_type` | `Literal["vector", "fulltext", "hybrid"]` | Type of search. Default: `"vector"`. |
-| `fulltext_index_name` | `str \| None` | Fulltext index for hybrid search. Required for hybrid. |
-| `mode` | `Literal["basic", "graph_enriched"]` | Search mode. Default: `"basic"`. |
-| `retrieval_query` | `str \| None` | Cypher query for graph enrichment. Required for `graph_enriched` mode. |
+| `fulltext_index_name` | `str \| None` | Fulltext index for hybrid search. Required when `index_type="hybrid"`. |
+
+### Search Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `retrieval_query` | `str \| None` | Cypher query for graph enrichment. When provided, enables graph traversal after index search. Must use `node` and `score` variables. |
 | `embedder` | `Embedder \| None` | neo4j-graphrag Embedder. Required for vector/hybrid. |
 | `top_k` | `int` | Number of results. Default: `5`. |
 | `context_prompt` | `str` | Prompt prepended to context. |
-| `message_history_count` | `int` | Recent messages to use. Default: `10`. |
+| `message_history_count` | `int` | Recent messages to use for query. Default: `10`. |
+| `filter_stop_words` | `bool \| None` | Filter stop words from fulltext queries. Default: `True` for fulltext, `False` otherwise. |
+
+### Memory Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `memory_enabled` | `bool` | Enable storing/retrieving conversation memories. Default: `False`. |
+| `memory_label` | `str` | Node label for stored memories. Default: `"Memory"`. |
+| `memory_roles` | `tuple[str, ...]` | Message roles to store. Default: `("user", "assistant")`. |
+| `overwrite_memory_index` | `bool` | Recreate memory indexes if they exist. Default: `False`. |
+| `memory_vector_index_name` | `str` | Name of vector index for memories. Default: `"memory_embeddings"`. |
+| `memory_fulltext_index_name` | `str` | Name of fulltext index for memories. Default: `"memory_fulltext"`. |
+
+### Scoping Parameters (for Memory)
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `application_id` | `str \| None` | Scope memories to a specific application. |
+| `agent_id` | `str \| None` | Scope memories to a specific agent. |
+| `user_id` | `str \| None` | Scope memories to a specific user. |
+| `thread_id` | `str \| None` | Scope memories to a specific conversation thread. |
+| `scope_to_per_operation_thread_id` | `bool` | Use per-operation thread ID from `thread_created()`. Default: `False`. |
+
+**Note:** When `memory_enabled=True`, at least one scoping parameter must be provided.
 
 ## Neo4jSettings
 
