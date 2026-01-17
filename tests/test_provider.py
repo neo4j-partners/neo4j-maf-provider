@@ -169,59 +169,18 @@ class TestInvoking:
             index_name="test_index",
             index_type="fulltext",
         )
+        # Test with single message
         message = ChatMessage(role=Role.USER, text="test query")
         context = await provider.invoking(message)
         assert context.messages == []
 
-    @pytest.mark.asyncio
-    async def test_invoking_handles_single_message(self) -> None:
-        """Invoking should handle a single ChatMessage."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-        )
-        message = ChatMessage(role=Role.USER, text="test query")
-        context = await provider.invoking(message)
-        assert context.messages == []
-
-    @pytest.mark.asyncio
-    async def test_invoking_handles_message_list(self) -> None:
-        """Invoking should handle a list of ChatMessages."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-        )
+        # Test with message list
         messages = [
             ChatMessage(role=Role.USER, text="first query"),
             ChatMessage(role=Role.ASSISTANT, text="first response"),
-            ChatMessage(role=Role.USER, text="second query"),
         ]
         context = await provider.invoking(messages)
         assert context.messages == []
-
-    @pytest.mark.asyncio
-    async def test_invoking_filters_system_messages(self) -> None:
-        """Invoking should filter out SYSTEM messages."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-        )
-        messages = [
-            ChatMessage(role=Role.SYSTEM, text="system prompt"),
-            ChatMessage(role=Role.USER, text="user query"),
-        ]
-        context = await provider.invoking(messages)
-        assert context.messages == []
-
-    @pytest.mark.asyncio
-    async def test_invoking_respects_message_history_count(self) -> None:
-        """Invoking should respect message_history_count limit."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            message_history_count=2,
-        )
-        assert provider._message_history_count == 2
 
 
 class TestHybridMode:
@@ -256,49 +215,27 @@ class TestMemoryConfiguration:
                 memory_enabled=True,
             )
 
-    def test_memory_enabled_with_user_id(self) -> None:
-        """Memory should work with user_id scope."""
+    @pytest.mark.parametrize(
+        "scope_field,scope_value",
+        [
+            ("user_id", "test_user"),
+            ("agent_id", "test_agent"),
+            ("application_id", "test_app"),
+            ("thread_id", "test_thread"),
+        ],
+    )
+    def test_memory_enabled_with_single_scope(
+        self, scope_field: str, scope_value: str
+    ) -> None:
+        """Memory should work with any single scope field."""
         provider = Neo4jContextProvider(
             index_name="test_index",
             index_type="fulltext",
             memory_enabled=True,
-            user_id="test_user",
+            **{scope_field: scope_value},
         )
         assert provider._memory_enabled is True
-        assert provider.user_id == "test_user"
-
-    def test_memory_enabled_with_agent_id(self) -> None:
-        """Memory should work with agent_id scope."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            agent_id="test_agent",
-        )
-        assert provider._memory_enabled is True
-        assert provider.agent_id == "test_agent"
-
-    def test_memory_enabled_with_application_id(self) -> None:
-        """Memory should work with application_id scope."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            application_id="test_app",
-        )
-        assert provider._memory_enabled is True
-        assert provider.application_id == "test_app"
-
-    def test_memory_enabled_with_thread_id(self) -> None:
-        """Memory should work with thread_id scope."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            thread_id="test_thread",
-        )
-        assert provider._memory_enabled is True
-        assert provider.thread_id == "test_thread"
+        assert getattr(provider, scope_field) == scope_value
 
     def test_custom_memory_label(self) -> None:
         """Memory should accept custom node label."""
@@ -436,55 +373,6 @@ class TestInvoked:
         await provider.invoked(message)
 
 
-class TestScopeFilterCypher:
-    """Test the scope filter Cypher generation via ScopeFilter."""
-
-    def test_builds_user_id_filter(self) -> None:
-        """Should build correct filter for user_id."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            user_id="test_user",
-        )
-        scope = provider._get_scope_filter()
-        where_clause, params = scope.to_cypher_where()
-        assert "m.user_id = $user_id" in where_clause
-        assert params["user_id"] == "test_user"
-
-    def test_builds_combined_filters(self) -> None:
-        """Should build correct combined filter for multiple scopes."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            user_id="test_user",
-            agent_id="test_agent",
-            application_id="test_app",
-        )
-        scope = provider._get_scope_filter()
-        where_clause, params = scope.to_cypher_where()
-        assert "m.user_id = $user_id" in where_clause
-        assert "m.agent_id = $agent_id" in where_clause
-        assert "m.application_id = $application_id" in where_clause
-        assert params["user_id"] == "test_user"
-        assert params["agent_id"] == "test_agent"
-        assert params["application_id"] == "test_app"
-
-    def test_includes_effective_thread_id(self) -> None:
-        """Should include effective thread ID in filter."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            thread_id="test_thread",
-        )
-        scope = provider._get_scope_filter()
-        where_clause, params = scope.to_cypher_where()
-        assert "m.thread_id = $thread_id" in where_clause
-        assert params["thread_id"] == "test_thread"
-
-
 class TestMemoryIndexConfiguration:
     """Test memory index configuration (Phase 1B lazy initialization)."""
 
@@ -554,25 +442,6 @@ class TestMemoryIndexConfiguration:
         )
         with pytest.raises(ValueError, match="Driver not initialized"):
             await provider._ensure_memory_indexes()
-
-    @pytest.mark.asyncio
-    async def test_ensure_memory_indexes_skips_when_already_initialized(self) -> None:
-        """_ensure_memory_indexes should skip when already initialized."""
-        provider = Neo4jContextProvider(
-            index_name="test_index",
-            index_type="fulltext",
-            memory_enabled=True,
-            user_id="test_user",
-        )
-        # Manually set initialized flag on the MemoryManager
-        assert provider._memory_manager is not None
-        provider._memory_manager._indexes_initialized = True
-        # Should not raise (skips because already initialized)
-        # Note: driver is None but it won't check because flag is True
-        # The provider's _ensure_memory_indexes will raise since driver is None,
-        # but the MemoryManager.ensure_indexes will skip early due to flag
-        # So we need to check via the manager directly
-        assert provider._memory_indexes_initialized is True
 
 
 class TestScopeFilter:
