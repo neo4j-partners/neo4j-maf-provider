@@ -129,6 +129,8 @@ NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your-password
 ```
 
+See [samples/SETUP.md](samples/SETUP.md) for instructions on setting up the financial data knowledge graph.
+
 ### Step 4: Run the Samples
 
 ```bash

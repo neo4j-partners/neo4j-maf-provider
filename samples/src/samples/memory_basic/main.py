@@ -20,6 +20,24 @@ import asyncio
 from samples.shared import print_header
 
 
+async def _cleanup_test_memories(neo4j_settings: "Neo4jSettings") -> None:
+    """Clean up any existing test memories from previous runs."""
+    import neo4j
+
+    driver = neo4j.GraphDatabase.driver(
+        neo4j_settings.uri,
+        auth=(neo4j_settings.username, neo4j_settings.get_password()),
+    )
+
+    with driver.session() as session:
+        # Delete memories for our test users
+        session.run(
+            "MATCH (m:Memory) WHERE m.user_id IN ['user_alice', 'user_bob'] DELETE m"
+        )
+
+    driver.close()
+
+
 async def demo_memory_basic() -> None:
     """Demo: Neo4j Memory Provider with persistent agent memory."""
     from azure.identity import DefaultAzureCredential
@@ -69,6 +87,11 @@ async def demo_memory_basic() -> None:
     embedder = None
 
     try:
+        # Clean up any existing test memories from previous runs
+        print("Cleaning up previous test data...")
+        await _cleanup_test_memories(neo4j_settings)
+        print("Done.\n")
+
         # Create embedder for semantic memory search
         embedder = AzureAIEmbedder(
             endpoint=azure_settings.inference_endpoint,
@@ -131,6 +154,10 @@ async def demo_memory_basic() -> None:
                     "My favorite trail is Emerald Lake Trail in Rocky Mountain National Park."
                 )
                 print(f"[Turn 2] Agent: {response.text}\n")
+
+        # Wait a moment for vector index to populate
+        print("\nWaiting for vector index to populate...")
+        await asyncio.sleep(2)
 
         # Now start a NEW conversation for User A
         # The memory should persist from the previous conversation

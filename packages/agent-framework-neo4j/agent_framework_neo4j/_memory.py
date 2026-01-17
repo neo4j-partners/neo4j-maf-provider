@@ -298,7 +298,7 @@ class MemoryManager:
     ) -> list[dict[str, Any]]:
         """Search Memory nodes with scoping filters.
 
-        Uses vector similarity if embedder is configured, otherwise falls back
+        Uses vector index search if embedder is configured, otherwise falls back
         to returning recent memories ordered by timestamp.
 
         Args:
@@ -314,22 +314,22 @@ class MemoryManager:
         params["top_k"] = top_k
 
         if self._embedder is not None:
-            # Vector similarity search on Memory nodes
+            # Vector similarity search using Neo4j vector index
             query_embedding = await asyncio.to_thread(
                 self._embedder.embed_query, query_text
             )
             params["query_embedding"] = query_embedding
 
-            # Use vector index if available, otherwise compute similarity
+            # Use db.index.vector.queryNodes() for proper vector index search
+            # This is the recommended approach for Neo4j 5.11+
             cypher = f"""
-            MATCH (m:{self._memory_label})
+            CALL db.index.vector.queryNodes($index_name, $top_k, $query_embedding)
+            YIELD node AS m, score
             WHERE {where_clause}
-            AND m.embedding IS NOT NULL
-            WITH m, gds.similarity.cosine(m.embedding, $query_embedding) AS score
-            ORDER BY score DESC
-            LIMIT $top_k
             RETURN m.text AS text, m.role AS role, m.timestamp AS timestamp, score
+            ORDER BY score DESC
             """
+            params["index_name"] = self._memory_vector_index_name
         else:
             # Fallback: return recent memories by timestamp
             cypher = f"""
