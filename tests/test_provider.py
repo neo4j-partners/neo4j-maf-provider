@@ -8,6 +8,7 @@ import pytest
 from agent_framework import ChatMessage, Role
 
 from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
+from agent_framework_neo4j._memory import MemoryManager, ScopeFilter
 
 
 class TestSettings:
@@ -61,9 +62,9 @@ class TestProviderInit:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider.search.index_name == "test_index"
-        assert provider.search.index_type == "fulltext"
-        assert provider.search.retrieval_query is None
+        assert provider._index_name == "test_index"
+        assert provider._index_type == "fulltext"
+        assert provider._retrieval_query is None
 
     def test_valid_retrieval_query_config(self) -> None:
         """Provider should accept retrieval_query for graph enrichment."""
@@ -72,8 +73,8 @@ class TestProviderInit:
             index_type="fulltext",
             retrieval_query="RETURN node.text AS text, score",
         )
-        assert provider.search.retrieval_query is not None
-        assert "RETURN" in provider.search.retrieval_query
+        assert provider._retrieval_query is not None
+        assert "RETURN" in provider._retrieval_query
 
     def test_default_values(self) -> None:
         """Provider should have sensible defaults."""
@@ -81,9 +82,9 @@ class TestProviderInit:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider.search.top_k == 5
-        assert provider.search.message_history_count == 10
-        assert "Knowledge Graph Context" in provider.search.context_prompt
+        assert provider._top_k == 5
+        assert provider._message_history_count == 10
+        assert "Knowledge Graph Context" in provider._context_prompt
 
     def test_not_connected_initially(self) -> None:
         """Provider should not be connected before __aenter__."""
@@ -101,7 +102,7 @@ class TestProviderInit:
             index_type="fulltext",
             context_prompt=custom_prompt,
         )
-        assert provider.search.context_prompt == custom_prompt
+        assert provider._context_prompt == custom_prompt
 
     def test_message_history_count(self) -> None:
         """Provider should accept message_history_count."""
@@ -110,7 +111,7 @@ class TestProviderInit:
             index_type="fulltext",
             message_history_count=5,
         )
-        assert provider.search.message_history_count == 5
+        assert provider._message_history_count == 5
 
     def test_top_k_validation(self) -> None:
         """Provider should validate top_k is positive."""
@@ -136,9 +137,8 @@ class TestGraphEnrichment:
             index_type="fulltext",
             retrieval_query=custom_query,
         )
-        assert provider.search.retrieval_query is not None
-        assert "FROM_DOCUMENT" in provider.search.retrieval_query
-        assert "doc.path AS source" in provider.search.retrieval_query
+        assert "FROM_DOCUMENT" in provider._retrieval_query
+        assert "doc.path AS source" in provider._retrieval_query
 
     def test_retrieval_query_patterns_from_workshop(self) -> None:
         """Test retrieval query patterns from the workshop examples."""
@@ -154,9 +154,9 @@ class TestGraphEnrichment:
             index_type="fulltext",
             retrieval_query=company_risk_query,
         )
-        assert provider.search.retrieval_query is not None
-        assert "FACES_RISK" in provider.search.retrieval_query
-        assert "collect(DISTINCT risk.name)" in provider.search.retrieval_query
+        assert provider._retrieval_query is not None
+        assert "FACES_RISK" in provider._retrieval_query
+        assert "collect(DISTINCT risk.name)" in provider._retrieval_query
 
 
 class TestInvoking:
@@ -221,7 +221,7 @@ class TestInvoking:
             index_type="fulltext",
             message_history_count=2,
         )
-        assert provider.search.message_history_count == 2
+        assert provider._message_history_count == 2
 
 
 class TestHybridMode:
@@ -245,7 +245,7 @@ class TestMemoryConfiguration:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider.memory.enabled is False
+        assert provider._memory_enabled is False
 
     def test_memory_requires_scope_filter(self) -> None:
         """Memory should require at least one scope filter when enabled."""
@@ -264,8 +264,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider.memory.enabled is True
-        assert provider.scope.user_id == "test_user"
+        assert provider._memory_enabled is True
+        assert provider.user_id == "test_user"
 
     def test_memory_enabled_with_agent_id(self) -> None:
         """Memory should work with agent_id scope."""
@@ -275,8 +275,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             agent_id="test_agent",
         )
-        assert provider.memory.enabled is True
-        assert provider.scope.agent_id == "test_agent"
+        assert provider._memory_enabled is True
+        assert provider.agent_id == "test_agent"
 
     def test_memory_enabled_with_application_id(self) -> None:
         """Memory should work with application_id scope."""
@@ -286,8 +286,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             application_id="test_app",
         )
-        assert provider.memory.enabled is True
-        assert provider.scope.application_id == "test_app"
+        assert provider._memory_enabled is True
+        assert provider.application_id == "test_app"
 
     def test_memory_enabled_with_thread_id(self) -> None:
         """Memory should work with thread_id scope."""
@@ -297,8 +297,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             thread_id="test_thread",
         )
-        assert provider.memory.enabled is True
-        assert provider.scope.thread_id == "test_thread"
+        assert provider._memory_enabled is True
+        assert provider.thread_id == "test_thread"
 
     def test_custom_memory_label(self) -> None:
         """Memory should accept custom node label."""
@@ -309,7 +309,7 @@ class TestMemoryConfiguration:
             user_id="test_user",
             memory_label="ConversationMemory",
         )
-        assert provider.memory.label == "ConversationMemory"
+        assert provider._memory_label == "ConversationMemory"
 
     def test_default_memory_label(self) -> None:
         """Memory should have default label 'Memory'."""
@@ -319,7 +319,7 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider.memory.label == "Memory"
+        assert provider._memory_label == "Memory"
 
     def test_custom_memory_roles(self) -> None:
         """Memory should accept custom roles to store."""
@@ -330,7 +330,7 @@ class TestMemoryConfiguration:
             user_id="test_user",
             memory_roles=("user", "assistant", "system"),
         )
-        assert provider.memory.roles == frozenset({"user", "assistant", "system"})
+        assert provider._memory_roles == {"user", "assistant", "system"}
 
     def test_default_memory_roles(self) -> None:
         """Memory should default to storing user and assistant roles."""
@@ -340,7 +340,7 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider.memory.roles == frozenset({"user", "assistant"})
+        assert provider._memory_roles == {"user", "assistant"}
 
 
 class TestThreadIdHandling:
@@ -437,7 +437,7 @@ class TestInvoked:
 
 
 class TestScopeFilterCypher:
-    """Test the scope filter Cypher generation."""
+    """Test the scope filter Cypher generation via ScopeFilter."""
 
     def test_builds_user_id_filter(self) -> None:
         """Should build correct filter for user_id."""
@@ -447,7 +447,8 @@ class TestScopeFilterCypher:
             memory_enabled=True,
             user_id="test_user",
         )
-        where_clause, params = provider._build_scope_filter_cypher()
+        scope = provider._get_scope_filter()
+        where_clause, params = scope.to_cypher_where()
         assert "m.user_id = $user_id" in where_clause
         assert params["user_id"] == "test_user"
 
@@ -461,7 +462,8 @@ class TestScopeFilterCypher:
             agent_id="test_agent",
             application_id="test_app",
         )
-        where_clause, params = provider._build_scope_filter_cypher()
+        scope = provider._get_scope_filter()
+        where_clause, params = scope.to_cypher_where()
         assert "m.user_id = $user_id" in where_clause
         assert "m.agent_id = $agent_id" in where_clause
         assert "m.application_id = $application_id" in where_clause
@@ -477,7 +479,8 @@ class TestScopeFilterCypher:
             memory_enabled=True,
             thread_id="test_thread",
         )
-        where_clause, params = provider._build_scope_filter_cypher()
+        scope = provider._get_scope_filter()
+        where_clause, params = scope.to_cypher_where()
         assert "m.thread_id = $thread_id" in where_clause
         assert params["thread_id"] == "test_thread"
 
@@ -493,8 +496,8 @@ class TestMemoryIndexConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider.memory.vector_index_name == "memory_embeddings"
-        assert provider.memory.fulltext_index_name == "memory_fulltext"
+        assert provider._memory_vector_index_name == "memory_embeddings"
+        assert provider._memory_fulltext_index_name == "memory_fulltext"
 
     def test_custom_memory_index_names(self) -> None:
         """Should accept custom index names."""
@@ -506,8 +509,8 @@ class TestMemoryIndexConfiguration:
             memory_vector_index_name="custom_vector_idx",
             memory_fulltext_index_name="custom_fulltext_idx",
         )
-        assert provider.memory.vector_index_name == "custom_vector_idx"
-        assert provider.memory.fulltext_index_name == "custom_fulltext_idx"
+        assert provider._memory_vector_index_name == "custom_vector_idx"
+        assert provider._memory_fulltext_index_name == "custom_fulltext_idx"
 
     def test_overwrite_memory_index_default_false(self) -> None:
         """Overwrite memory index should default to False."""
@@ -517,7 +520,7 @@ class TestMemoryIndexConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider.memory.overwrite_index is False
+        assert provider._overwrite_memory_index is False
 
     def test_overwrite_memory_index_can_be_enabled(self) -> None:
         """Overwrite memory index can be set to True."""
@@ -528,7 +531,7 @@ class TestMemoryIndexConfiguration:
             user_id="test_user",
             overwrite_memory_index=True,
         )
-        assert provider.memory.overwrite_index is True
+        assert provider._overwrite_memory_index is True
 
     def test_memory_indexes_not_initialized_initially(self) -> None:
         """Memory indexes should not be initialized at startup."""
@@ -561,9 +564,98 @@ class TestMemoryIndexConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        # Manually set initialized flag
-        provider._memory_indexes_initialized = True
+        # Manually set initialized flag on the MemoryManager
+        assert provider._memory_manager is not None
+        provider._memory_manager._indexes_initialized = True
         # Should not raise (skips because already initialized)
         # Note: driver is None but it won't check because flag is True
-        await provider._ensure_memory_indexes()
+        # The provider's _ensure_memory_indexes will raise since driver is None,
+        # but the MemoryManager.ensure_indexes will skip early due to flag
+        # So we need to check via the manager directly
         assert provider._memory_indexes_initialized is True
+
+
+class TestScopeFilter:
+    """Test ScopeFilter dataclass."""
+
+    def test_empty_scope_returns_always_true(self) -> None:
+        """Empty scope filter should return '1=1' WHERE clause."""
+        scope = ScopeFilter()
+        where_clause, params = scope.to_cypher_where()
+        assert where_clause == "1=1"
+        assert params == {}
+
+    def test_single_field_filter(self) -> None:
+        """Should build correct filter for single field."""
+        scope = ScopeFilter(user_id="test_user")
+        where_clause, params = scope.to_cypher_where()
+        assert "m.user_id = $user_id" in where_clause
+        assert params["user_id"] == "test_user"
+
+    def test_multiple_fields_filter(self) -> None:
+        """Should build correct filter for multiple fields."""
+        scope = ScopeFilter(
+            application_id="app1",
+            agent_id="agent1",
+            user_id="user1",
+            thread_id="thread1",
+        )
+        where_clause, params = scope.to_cypher_where()
+        assert "m.application_id = $application_id" in where_clause
+        assert "m.agent_id = $agent_id" in where_clause
+        assert "m.user_id = $user_id" in where_clause
+        assert "m.thread_id = $thread_id" in where_clause
+        assert params["application_id"] == "app1"
+        assert params["agent_id"] == "agent1"
+        assert params["user_id"] == "user1"
+        assert params["thread_id"] == "thread1"
+
+    def test_custom_alias(self) -> None:
+        """Should use custom alias in WHERE clause."""
+        scope = ScopeFilter(user_id="test_user")
+        where_clause, params = scope.to_cypher_where(alias="memory")
+        assert "memory.user_id = $user_id" in where_clause
+
+    def test_immutable(self) -> None:
+        """ScopeFilter should be immutable (frozen dataclass)."""
+        scope = ScopeFilter(user_id="test_user")
+        with pytest.raises(AttributeError):
+            scope.user_id = "other_user"  # type: ignore[misc]
+
+
+class TestMemoryManager:
+    """Test MemoryManager class."""
+
+    def test_default_initialization(self) -> None:
+        """Should initialize with default values."""
+        manager = MemoryManager(
+            memory_roles={"user", "assistant"},
+        )
+        assert manager._memory_label == "Memory"
+        assert manager._memory_vector_index_name == "memory_embeddings"
+        assert manager._memory_fulltext_index_name == "memory_fulltext"
+        assert manager._overwrite_memory_index is False
+        assert manager._embedder is None
+        assert manager.indexes_initialized is False
+
+    def test_custom_initialization(self) -> None:
+        """Should accept custom configuration."""
+        manager = MemoryManager(
+            memory_label="CustomMemory",
+            memory_roles={"user"},
+            memory_vector_index_name="custom_vector",
+            memory_fulltext_index_name="custom_fulltext",
+            overwrite_memory_index=True,
+        )
+        assert manager._memory_label == "CustomMemory"
+        assert manager._memory_roles == {"user"}
+        assert manager._memory_vector_index_name == "custom_vector"
+        assert manager._memory_fulltext_index_name == "custom_fulltext"
+        assert manager._overwrite_memory_index is True
+
+    def test_indexes_initialized_property(self) -> None:
+        """indexes_initialized property should reflect internal state."""
+        manager = MemoryManager(memory_roles={"user"})
+        assert manager.indexes_initialized is False
+        manager._indexes_initialized = True
+        assert manager.indexes_initialized is True

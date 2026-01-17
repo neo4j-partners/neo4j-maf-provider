@@ -25,31 +25,15 @@ Example:
 
 from ._embedder import AzureAIEmbedder
 from ._fulltext import FulltextRetriever
-from ._provider import (
-    DEFAULT_CONTEXT_PROMPT,
-    ConnectionConfig,
-    MemoryConfig,
-    Neo4jContextProvider,
-    ScopeConfig,
-    SearchConfig,
-)
+from ._provider import Neo4jContextProvider
 from ._settings import AzureAISettings, Neo4jSettings
 
 __version__ = "0.1.0"
 
 __all__ = [
-    # Main provider
     "Neo4jContextProvider",
-    # Configuration dataclasses
-    "SearchConfig",
-    "MemoryConfig",
-    "ScopeConfig",
-    "ConnectionConfig",
-    "DEFAULT_CONTEXT_PROMPT",
-    # Settings (env var loaders)
     "Neo4jSettings",
     "AzureAISettings",
-    # Utilities
     "AzureAIEmbedder",
     "FulltextRetriever",
     "__version__",
