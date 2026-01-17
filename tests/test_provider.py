@@ -61,9 +61,9 @@ class TestProviderInit:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider._index_name == "test_index"
-        assert provider._index_type == "fulltext"
-        assert provider._retrieval_query is None
+        assert provider.search.index_name == "test_index"
+        assert provider.search.index_type == "fulltext"
+        assert provider.search.retrieval_query is None
 
     def test_valid_retrieval_query_config(self) -> None:
         """Provider should accept retrieval_query for graph enrichment."""
@@ -72,8 +72,8 @@ class TestProviderInit:
             index_type="fulltext",
             retrieval_query="RETURN node.text AS text, score",
         )
-        assert provider._retrieval_query is not None
-        assert "RETURN" in provider._retrieval_query
+        assert provider.search.retrieval_query is not None
+        assert "RETURN" in provider.search.retrieval_query
 
     def test_default_values(self) -> None:
         """Provider should have sensible defaults."""
@@ -81,9 +81,9 @@ class TestProviderInit:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider._top_k == 5
-        assert provider._message_history_count == 10
-        assert "Knowledge Graph Context" in provider._context_prompt
+        assert provider.search.top_k == 5
+        assert provider.search.message_history_count == 10
+        assert "Knowledge Graph Context" in provider.search.context_prompt
 
     def test_not_connected_initially(self) -> None:
         """Provider should not be connected before __aenter__."""
@@ -101,7 +101,7 @@ class TestProviderInit:
             index_type="fulltext",
             context_prompt=custom_prompt,
         )
-        assert provider._context_prompt == custom_prompt
+        assert provider.search.context_prompt == custom_prompt
 
     def test_message_history_count(self) -> None:
         """Provider should accept message_history_count."""
@@ -110,7 +110,7 @@ class TestProviderInit:
             index_type="fulltext",
             message_history_count=5,
         )
-        assert provider._message_history_count == 5
+        assert provider.search.message_history_count == 5
 
     def test_top_k_validation(self) -> None:
         """Provider should validate top_k is positive."""
@@ -136,8 +136,9 @@ class TestGraphEnrichment:
             index_type="fulltext",
             retrieval_query=custom_query,
         )
-        assert "FROM_DOCUMENT" in provider._retrieval_query
-        assert "doc.path AS source" in provider._retrieval_query
+        assert provider.search.retrieval_query is not None
+        assert "FROM_DOCUMENT" in provider.search.retrieval_query
+        assert "doc.path AS source" in provider.search.retrieval_query
 
     def test_retrieval_query_patterns_from_workshop(self) -> None:
         """Test retrieval query patterns from the workshop examples."""
@@ -153,9 +154,9 @@ class TestGraphEnrichment:
             index_type="fulltext",
             retrieval_query=company_risk_query,
         )
-        assert provider._retrieval_query is not None
-        assert "FACES_RISK" in provider._retrieval_query
-        assert "collect(DISTINCT risk.name)" in provider._retrieval_query
+        assert provider.search.retrieval_query is not None
+        assert "FACES_RISK" in provider.search.retrieval_query
+        assert "collect(DISTINCT risk.name)" in provider.search.retrieval_query
 
 
 class TestInvoking:
@@ -220,7 +221,7 @@ class TestInvoking:
             index_type="fulltext",
             message_history_count=2,
         )
-        assert provider._message_history_count == 2
+        assert provider.search.message_history_count == 2
 
 
 class TestHybridMode:
@@ -244,7 +245,7 @@ class TestMemoryConfiguration:
             index_name="test_index",
             index_type="fulltext",
         )
-        assert provider._memory_enabled is False
+        assert provider.memory.enabled is False
 
     def test_memory_requires_scope_filter(self) -> None:
         """Memory should require at least one scope filter when enabled."""
@@ -263,8 +264,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider._memory_enabled is True
-        assert provider.user_id == "test_user"
+        assert provider.memory.enabled is True
+        assert provider.scope.user_id == "test_user"
 
     def test_memory_enabled_with_agent_id(self) -> None:
         """Memory should work with agent_id scope."""
@@ -274,8 +275,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             agent_id="test_agent",
         )
-        assert provider._memory_enabled is True
-        assert provider.agent_id == "test_agent"
+        assert provider.memory.enabled is True
+        assert provider.scope.agent_id == "test_agent"
 
     def test_memory_enabled_with_application_id(self) -> None:
         """Memory should work with application_id scope."""
@@ -285,8 +286,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             application_id="test_app",
         )
-        assert provider._memory_enabled is True
-        assert provider.application_id == "test_app"
+        assert provider.memory.enabled is True
+        assert provider.scope.application_id == "test_app"
 
     def test_memory_enabled_with_thread_id(self) -> None:
         """Memory should work with thread_id scope."""
@@ -296,8 +297,8 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             thread_id="test_thread",
         )
-        assert provider._memory_enabled is True
-        assert provider.thread_id == "test_thread"
+        assert provider.memory.enabled is True
+        assert provider.scope.thread_id == "test_thread"
 
     def test_custom_memory_label(self) -> None:
         """Memory should accept custom node label."""
@@ -308,7 +309,7 @@ class TestMemoryConfiguration:
             user_id="test_user",
             memory_label="ConversationMemory",
         )
-        assert provider._memory_label == "ConversationMemory"
+        assert provider.memory.label == "ConversationMemory"
 
     def test_default_memory_label(self) -> None:
         """Memory should have default label 'Memory'."""
@@ -318,7 +319,7 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider._memory_label == "Memory"
+        assert provider.memory.label == "Memory"
 
     def test_custom_memory_roles(self) -> None:
         """Memory should accept custom roles to store."""
@@ -329,7 +330,7 @@ class TestMemoryConfiguration:
             user_id="test_user",
             memory_roles=("user", "assistant", "system"),
         )
-        assert provider._memory_roles == {"user", "assistant", "system"}
+        assert provider.memory.roles == frozenset({"user", "assistant", "system"})
 
     def test_default_memory_roles(self) -> None:
         """Memory should default to storing user and assistant roles."""
@@ -339,7 +340,7 @@ class TestMemoryConfiguration:
             memory_enabled=True,
             user_id="test_user",
         )
-        assert provider._memory_roles == {"user", "assistant"}
+        assert provider.memory.roles == frozenset({"user", "assistant"})
 
 
 class TestThreadIdHandling:
@@ -479,3 +480,90 @@ class TestScopeFilterCypher:
         where_clause, params = provider._build_scope_filter_cypher()
         assert "m.thread_id = $thread_id" in where_clause
         assert params["thread_id"] == "test_thread"
+
+
+class TestMemoryIndexConfiguration:
+    """Test memory index configuration (Phase 1B lazy initialization)."""
+
+    def test_default_memory_index_names(self) -> None:
+        """Should have default index names."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider.memory.vector_index_name == "memory_embeddings"
+        assert provider.memory.fulltext_index_name == "memory_fulltext"
+
+    def test_custom_memory_index_names(self) -> None:
+        """Should accept custom index names."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            memory_vector_index_name="custom_vector_idx",
+            memory_fulltext_index_name="custom_fulltext_idx",
+        )
+        assert provider.memory.vector_index_name == "custom_vector_idx"
+        assert provider.memory.fulltext_index_name == "custom_fulltext_idx"
+
+    def test_overwrite_memory_index_default_false(self) -> None:
+        """Overwrite memory index should default to False."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider.memory.overwrite_index is False
+
+    def test_overwrite_memory_index_can_be_enabled(self) -> None:
+        """Overwrite memory index can be set to True."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+            overwrite_memory_index=True,
+        )
+        assert provider.memory.overwrite_index is True
+
+    def test_memory_indexes_not_initialized_initially(self) -> None:
+        """Memory indexes should not be initialized at startup."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        assert provider._memory_indexes_initialized is False
+
+    @pytest.mark.asyncio
+    async def test_ensure_memory_indexes_raises_when_not_connected(self) -> None:
+        """_ensure_memory_indexes should raise when driver not initialized."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        with pytest.raises(ValueError, match="Driver not initialized"):
+            await provider._ensure_memory_indexes()
+
+    @pytest.mark.asyncio
+    async def test_ensure_memory_indexes_skips_when_already_initialized(self) -> None:
+        """_ensure_memory_indexes should skip when already initialized."""
+        provider = Neo4jContextProvider(
+            index_name="test_index",
+            index_type="fulltext",
+            memory_enabled=True,
+            user_id="test_user",
+        )
+        # Manually set initialized flag
+        provider._memory_indexes_initialized = True
+        # Should not raise (skips because already initialized)
+        # Note: driver is None but it won't check because flag is True
+        await provider._ensure_memory_indexes()
+        assert provider._memory_indexes_initialized is True

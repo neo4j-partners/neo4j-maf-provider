@@ -14,6 +14,7 @@ import asyncio
 import sys
 import uuid
 from collections.abc import MutableSequence, Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -49,7 +50,7 @@ RetrieverType = VectorRetriever | VectorCypherRetriever | HybridRetriever | Hybr
 IndexType = Literal["vector", "fulltext", "hybrid"]
 
 # Default context prompt for Neo4j knowledge graph context
-_DEFAULT_CONTEXT_PROMPT = (
+DEFAULT_CONTEXT_PROMPT = (
     "## Knowledge Graph Context\n"
     "Use the following information from the knowledge graph to answer the question:"
 )
@@ -78,55 +79,126 @@ def _format_cypher_result(record: neo4j.Record) -> RetrieverResultItem:
     return RetrieverResultItem(content=str(content), metadata=data if data else None)
 
 
-class ConnectionConfig(BaseModel):
-    """Validated Neo4j connection configuration with non-optional types."""
+# =============================================================================
+# Configuration Dataclasses (frozen, slots for performance)
+# =============================================================================
 
-    model_config = ConfigDict(frozen=True)
+
+@dataclass(slots=True, frozen=True)
+class ConnectionConfig:
+    """Validated Neo4j connection configuration."""
 
     uri: str
     username: str
     password: str
 
 
-class ProviderConfig(BaseModel):
-    """
-    Pydantic model for Neo4jContextProvider configuration validation.
+@dataclass(slots=True, frozen=True)
+class ScopeConfig:
+    """Multi-tenancy scoping configuration."""
 
-    Validates all configuration parameters and their interdependencies.
-    After validation, use the get_* methods for type-safe access to
-    conditionally required fields.
+    application_id: str | None = None
+    agent_id: str | None = None
+    user_id: str | None = None
+    thread_id: str | None = None
+    use_per_operation_thread_id: bool = False
+
+    def has_any_scope(self) -> bool:
+        """Check if at least one scope filter is set."""
+        return any([self.application_id, self.agent_id, self.user_id, self.thread_id])
+
+
+@dataclass(slots=True, frozen=True)
+class MemoryConfig:
+    """Memory-related configuration."""
+
+    enabled: bool = False
+    label: str = "Memory"
+    roles: frozenset[str] = field(default_factory=lambda: frozenset(("user", "assistant")))
+    overwrite_index: bool = False
+    vector_index_name: str = "memory_embeddings"
+    fulltext_index_name: str = "memory_fulltext"
+
+
+@dataclass(slots=True, frozen=True)
+class SearchConfig:
+    """Search and retrieval configuration."""
+
+    index_name: str
+    index_type: IndexType = "vector"
+    fulltext_index_name: str | None = None
+    retrieval_query: str | None = None
+    top_k: int = 5
+    context_prompt: str = DEFAULT_CONTEXT_PROMPT
+    message_history_count: int = 10
+    filter_stop_words: bool | None = None
+    embedder: Embedder | None = field(default=None, compare=False, hash=False)
+
+    @property
+    def effective_filter_stop_words(self) -> bool:
+        """Get filter_stop_words with default based on index type."""
+        if self.filter_stop_words is None:
+            return self.index_type == "fulltext"
+        return self.filter_stop_words
+
+    @property
+    def use_graph_enrichment(self) -> bool:
+        """Check if graph enrichment is enabled."""
+        return self.retrieval_query is not None
+
+    def get_retrieval_query(self) -> str:
+        """Get retrieval_query - raises if not set."""
+        if self.retrieval_query is None:
+            raise ValueError("retrieval_query not set")
+        return self.retrieval_query
+
+    def get_fulltext_index_name(self) -> str:
+        """Get fulltext_index_name - raises if not set."""
+        if self.fulltext_index_name is None:
+            raise ValueError("fulltext_index_name not set")
+        return self.fulltext_index_name
+
+    def get_embedder(self) -> Embedder:
+        """Get embedder - raises if not set."""
+        if self.embedder is None:
+            raise ValueError("embedder not set")
+        return self.embedder
+
+
+# =============================================================================
+# Pydantic Validation Model (for input validation only)
+# =============================================================================
+
+
+class _InputValidator(BaseModel):
+    """
+    Pydantic model for input validation with cross-field constraints.
+
+    This is used internally to validate constructor arguments before
+    creating the frozen dataclass configurations.
     """
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    # Connection settings
+    # All fields match constructor parameters
     uri: str | None = None
     username: str | None = None
     password: str | None = None
-
-    # Index configuration
     index_name: str
     index_type: IndexType = "vector"
     fulltext_index_name: str | None = None
-
-    # Graph enrichment (optional Cypher query for traversal)
     retrieval_query: str | None = None
-
-    # Search parameters
     top_k: int = 5
-    context_prompt: str = _DEFAULT_CONTEXT_PROMPT
+    context_prompt: str = DEFAULT_CONTEXT_PROMPT
     message_history_count: int = 10
     filter_stop_words: bool | None = None
-
-    # Embedder (validated separately due to complex type)
     embedder: Embedder | None = None
-
-    # Memory configuration (Phase 1)
     memory_enabled: bool = False
     memory_label: str = "Memory"
     memory_roles: tuple[MemoryRole, ...] = ("user", "assistant")
-
-    # Scoping parameters for multi-tenancy (following Mem0/Redis patterns)
+    overwrite_memory_index: bool = False
+    memory_vector_index_name: str = "memory_embeddings"
+    memory_fulltext_index_name: str = "memory_fulltext"
     application_id: str | None = None
     agent_id: str | None = None
     user_id: str | None = None
@@ -159,26 +231,14 @@ class ProviderConfig(BaseModel):
     @model_validator(mode="after")
     def validate_config(self) -> Self:
         """Validate interdependent configuration options."""
-        # Hybrid search requires fulltext index
         if self.index_type == "hybrid" and not self.fulltext_index_name:
-            raise ValueError(
-                "fulltext_index_name is required when index_type='hybrid'"
-            )
+            raise ValueError("fulltext_index_name is required when index_type='hybrid'")
 
-        # Vector/hybrid search requires embedder
         if self.index_type in ("vector", "hybrid") and self.embedder is None:
-            raise ValueError(
-                f"embedder is required when index_type='{self.index_type}'"
-            )
+            raise ValueError(f"embedder is required when index_type='{self.index_type}'")
 
-        # Memory requires at least one scope filter (following Mem0/Redis pattern)
         if self.memory_enabled:
-            has_scope = any([
-                self.application_id,
-                self.agent_id,
-                self.user_id,
-                self.thread_id,
-            ])
+            has_scope = any([self.application_id, self.agent_id, self.user_id, self.thread_id])
             if not has_scope:
                 raise ValueError(
                     "Memory requires at least one scope filter: "
@@ -187,26 +247,35 @@ class ProviderConfig(BaseModel):
 
         return self
 
-    # Type-safe accessors for conditionally required fields
-    # These return non-optional types after validation guarantees
-
-    def get_retrieval_query(self) -> str:
-        """Get retrieval_query - raises if not set."""
-        if self.retrieval_query is None:
-            raise ValueError("retrieval_query not set")
-        return self.retrieval_query
-
-    def get_fulltext_index_name(self) -> str:
-        """Get fulltext_index_name (guaranteed set for hybrid mode)."""
-        if self.fulltext_index_name is None:
-            raise ValueError("fulltext_index_name not set")
-        return self.fulltext_index_name
-
-    def get_embedder(self) -> Embedder:
-        """Get embedder (guaranteed set for vector/hybrid mode)."""
-        if self.embedder is None:
-            raise ValueError("embedder not set")
-        return self.embedder
+    def to_configs(self) -> tuple[SearchConfig, MemoryConfig, ScopeConfig]:
+        """Convert validated input to frozen config dataclasses."""
+        search = SearchConfig(
+            index_name=self.index_name,
+            index_type=self.index_type,
+            fulltext_index_name=self.fulltext_index_name,
+            retrieval_query=self.retrieval_query,
+            top_k=self.top_k,
+            context_prompt=self.context_prompt,
+            message_history_count=self.message_history_count,
+            filter_stop_words=self.filter_stop_words,
+            embedder=self.embedder,
+        )
+        memory = MemoryConfig(
+            enabled=self.memory_enabled,
+            label=self.memory_label,
+            roles=frozenset(self.memory_roles),
+            overwrite_index=self.overwrite_memory_index,
+            vector_index_name=self.memory_vector_index_name,
+            fulltext_index_name=self.memory_fulltext_index_name,
+        )
+        scope = ScopeConfig(
+            application_id=self.application_id,
+            agent_id=self.agent_id,
+            user_id=self.user_id,
+            thread_id=self.thread_id,
+            use_per_operation_thread_id=self.scope_to_per_operation_thread_id,
+        )
+        return search, memory, scope
 
     def get_connection(self) -> ConnectionConfig:
         """Get validated connection config - raises if not all fields set."""
@@ -215,11 +284,11 @@ class ProviderConfig(BaseModel):
                 "Neo4j connection requires uri, username, and password. "
                 "Set via constructor or NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD env vars."
             )
-        return ConnectionConfig(
-            uri=self.uri,
-            username=self.username,
-            password=self.password,
-        )
+        # Type narrowing - we've verified these are not None
+        assert self.uri is not None
+        assert self.username is not None
+        assert self.password is not None
+        return ConnectionConfig(uri=self.uri, username=self.username, password=self.password)
 
 
 class Neo4jContextProvider(ContextProvider):
@@ -236,7 +305,24 @@ class Neo4jContextProvider(ContextProvider):
     - Index-driven configuration - works with any Neo4j index
     - Configurable enrichment - users define their own retrieval_query
     - Async wrapping - neo4j-graphrag retrievers are sync, wrapped with asyncio.to_thread()
+
+    Configuration is stored in frozen dataclasses for immutability and type safety:
+    - SearchConfig: Index and retrieval settings
+    - MemoryConfig: Memory storage settings
+    - ScopeConfig: Multi-tenancy scoping
     """
+
+    # Frozen config dataclasses (set once in __init__)
+    __slots__ = (
+        "_search",
+        "_memory",
+        "_scope",
+        "_validator",
+        "_driver",
+        "_retriever",
+        "_per_operation_thread_id",
+        "_memory_indexes_initialized",
+    )
 
     def __init__(
         self,
@@ -252,7 +338,7 @@ class Neo4jContextProvider(ContextProvider):
         fulltext_index_name: str | None = None,
         # Search parameters
         top_k: int = 5,
-        context_prompt: str = _DEFAULT_CONTEXT_PROMPT,
+        context_prompt: str = DEFAULT_CONTEXT_PROMPT,
         # Graph enrichment - Cypher query for traversal after index search
         retrieval_query: str | None = None,
         # Embedder for vector/hybrid search (neo4j-graphrag Embedder)
@@ -265,6 +351,10 @@ class Neo4jContextProvider(ContextProvider):
         memory_enabled: bool = False,
         memory_label: str = "Memory",
         memory_roles: tuple[MemoryRole, ...] = ("user", "assistant"),
+        # Memory index configuration (Phase 1B - lazy initialization)
+        overwrite_memory_index: bool = False,
+        memory_vector_index_name: str = "memory_embeddings",
+        memory_fulltext_index_name: str = "memory_fulltext",
         # Scoping parameters for multi-tenancy (following Mem0/Redis patterns)
         application_id: str | None = None,
         agent_id: str | None = None,
@@ -280,24 +370,20 @@ class Neo4jContextProvider(ContextProvider):
             username: Neo4j username. Falls back to NEO4J_USERNAME env var.
             password: Neo4j password. Falls back to NEO4J_PASSWORD env var.
             index_name: Name of the Neo4j index to query. Required.
-                For vector/hybrid: the vector index name.
-                For fulltext: the fulltext index name.
             index_type: Type of search - "vector", "fulltext", or "hybrid".
             fulltext_index_name: Fulltext index name for hybrid search.
-                Required when index_type is "hybrid".
             top_k: Number of results to retrieve.
             context_prompt: Prompt prepended to context.
             retrieval_query: Optional Cypher query for graph enrichment.
-                If provided, runs after index search to traverse the graph.
-                Must use `node` and `score` variables from index search.
             embedder: neo4j-graphrag Embedder for vector/hybrid search.
-                Required when index_type is "vector" or "hybrid".
             message_history_count: Number of recent messages to use for query.
             filter_stop_words: Filter common stop words from fulltext queries.
-                Defaults to True for fulltext indexes, False otherwise.
             memory_enabled: Enable storing conversation messages as Memory nodes.
-            memory_label: Node label for stored memories. Default: "Memory".
-            memory_roles: Which message roles to store. Default: ("user", "assistant").
+            memory_label: Node label for stored memories.
+            memory_roles: Which message roles to store.
+            overwrite_memory_index: Recreate memory indexes even if they exist.
+            memory_vector_index_name: Name of vector index for memories.
+            memory_fulltext_index_name: Name of fulltext index for memories.
             application_id: Application ID for scoping memories.
             agent_id: Agent ID for scoping memories.
             user_id: User ID for scoping memories.
@@ -307,23 +393,22 @@ class Neo4jContextProvider(ContextProvider):
         Raises:
             ValueError: If required configuration is missing or invalid.
         """
-        # Load settings from environment (single source of truth)
+        # Load settings from environment
         settings = Neo4jSettings()
 
-        # Build effective settings by merging constructor args with env settings
+        # Merge constructor args with environment settings
         effective_uri = uri or settings.uri
         effective_username = username or settings.username
         effective_password = password or settings.get_password()
         effective_index_name = index_name or settings.index_name
 
-        # Validate index_name is provided (before Pydantic validation)
         if not effective_index_name:
             raise ValueError(
                 "index_name is required. Set via constructor or NEO4J_INDEX_NAME env var."
             )
 
-        # Use Pydantic model for comprehensive validation
-        self._config = ProviderConfig(
+        # Validate all inputs and create frozen config dataclasses
+        self._validator = _InputValidator(
             uri=effective_uri,
             username=effective_username,
             password=effective_password,
@@ -336,11 +421,12 @@ class Neo4jContextProvider(ContextProvider):
             message_history_count=message_history_count,
             filter_stop_words=filter_stop_words,
             embedder=embedder,
-            # Memory configuration
             memory_enabled=memory_enabled,
             memory_label=memory_label,
             memory_roles=memory_roles,
-            # Scoping parameters
+            overwrite_memory_index=overwrite_memory_index,
+            memory_vector_index_name=memory_vector_index_name,
+            memory_fulltext_index_name=memory_fulltext_index_name,
             application_id=application_id,
             agent_id=agent_id,
             user_id=user_id,
@@ -348,86 +434,82 @@ class Neo4jContextProvider(ContextProvider):
             scope_to_per_operation_thread_id=scope_to_per_operation_thread_id,
         )
 
-        # Store commonly accessed values for convenience
-        self._index_name = self._config.index_name
-        self._index_type = self._config.index_type
-        self._retrieval_query = self._config.retrieval_query
-        self._top_k = self._config.top_k
-        self._context_prompt = self._config.context_prompt
-        self._message_history_count = self._config.message_history_count
+        # Convert to frozen dataclasses (immutable after this point)
+        self._search, self._memory, self._scope = self._validator.to_configs()
 
-        # Stop word filtering - default to True for fulltext, False otherwise
-        if self._config.filter_stop_words is None:
-            self._filter_stop_words = self._index_type == "fulltext"
-        else:
-            self._filter_stop_words = self._config.filter_stop_words
-
-        # Memory configuration
-        self._memory_enabled = self._config.memory_enabled
-        self._memory_label = self._config.memory_label
-        self._memory_roles = set(self._config.memory_roles)
-
-        # Scoping parameters (following Mem0/Redis patterns)
-        self.application_id = self._config.application_id
-        self.agent_id = self._config.agent_id
-        self.user_id = self._config.user_id
-        self.thread_id = self._config.thread_id
-        self.scope_to_per_operation_thread_id = self._config.scope_to_per_operation_thread_id
-
-        # Runtime state
+        # Runtime state (mutable)
         self._driver: neo4j.Driver | None = None
         self._retriever: RetrieverType | None = None
         self._per_operation_thread_id: str | None = None
+        self._memory_indexes_initialized: bool = False
+
+    # -------------------------------------------------------------------------
+    # Public properties for accessing configuration
+    # -------------------------------------------------------------------------
+
+    @property
+    def search(self) -> SearchConfig:
+        """Search configuration (frozen)."""
+        return self._search
+
+    @property
+    def memory(self) -> MemoryConfig:
+        """Memory configuration (frozen)."""
+        return self._memory
+
+    @property
+    def scope(self) -> ScopeConfig:
+        """Scope configuration (frozen)."""
+        return self._scope
 
     def _create_retriever(self) -> RetrieverType:
         """Create the appropriate neo4j-graphrag retriever based on configuration."""
         if self._driver is None:
             raise ValueError("Driver not initialized")
 
-        # Determine if graph enrichment is enabled (retrieval_query provided)
-        use_graph_enrichment = self._retrieval_query is not None
+        search = self._search
 
-        if self._index_type == "vector":
-            if use_graph_enrichment:
+        if search.index_type == "vector":
+            if search.use_graph_enrichment:
                 return VectorCypherRetriever(
                     driver=self._driver,
-                    index_name=self._index_name,
-                    retrieval_query=self._config.get_retrieval_query(),
-                    embedder=self._config.get_embedder(),
+                    index_name=search.index_name,
+                    retrieval_query=search.get_retrieval_query(),
+                    embedder=search.get_embedder(),
                     result_formatter=_format_cypher_result,
                 )
             else:
                 return VectorRetriever(
                     driver=self._driver,
-                    index_name=self._index_name,
-                    embedder=self._config.get_embedder(),
+                    index_name=search.index_name,
+                    embedder=search.get_embedder(),
                 )
 
-        elif self._index_type == "hybrid":
-            if use_graph_enrichment:
+        elif search.index_type == "hybrid":
+            if search.use_graph_enrichment:
                 return HybridCypherRetriever(
                     driver=self._driver,
-                    vector_index_name=self._index_name,
-                    fulltext_index_name=self._config.get_fulltext_index_name(),
-                    retrieval_query=self._config.get_retrieval_query(),
-                    embedder=self._config.get_embedder(),
+                    vector_index_name=search.index_name,
+                    fulltext_index_name=search.get_fulltext_index_name(),
+                    retrieval_query=search.get_retrieval_query(),
+                    embedder=search.get_embedder(),
                     result_formatter=_format_cypher_result,
                 )
             else:
                 return HybridRetriever(
                     driver=self._driver,
-                    vector_index_name=self._index_name,
-                    fulltext_index_name=self._config.get_fulltext_index_name(),
-                    embedder=self._config.get_embedder(),
+                    vector_index_name=search.index_name,
+                    fulltext_index_name=search.get_fulltext_index_name(),
+                    embedder=search.get_embedder(),
                 )
 
         else:  # fulltext
             return FulltextRetriever(
                 driver=self._driver,
-                index_name=self._index_name,
-                retrieval_query=self._retrieval_query,
-                filter_stop_words=self._filter_stop_words,
-                result_formatter=_format_cypher_result if use_graph_enrichment else None,
+                index_name=search.index_name,
+                retrieval_query=search.retrieval_query,
+                filter_stop_words=search.effective_filter_stop_words,
+                result_formatter=_format_cypher_result if search.use_graph_enrichment else None,
             )
 
     @property
@@ -437,9 +519,9 @@ class Neo4jContextProvider(ContextProvider):
         Returns per-operation thread ID when scoping is enabled;
         otherwise the provider's configured thread_id.
         """
-        if self.scope_to_per_operation_thread_id:
+        if self._scope.use_per_operation_thread_id:
             return self._per_operation_thread_id
-        return self.thread_id
+        return self._scope.thread_id
 
     def _validate_per_operation_thread_id(self, thread_id: str | None) -> None:
         """Validate that a new thread ID doesn't conflict when scoped.
@@ -454,7 +536,7 @@ class Neo4jContextProvider(ContextProvider):
             ValueError: If a new thread ID conflicts with the existing one.
         """
         if (
-            self.scope_to_per_operation_thread_id
+            self._scope.use_per_operation_thread_id
             and thread_id
             and self._per_operation_thread_id
             and thread_id != self._per_operation_thread_id
@@ -480,7 +562,7 @@ class Neo4jContextProvider(ContextProvider):
     async def __aenter__(self) -> Self:
         """Connect to Neo4j and create retriever."""
         # Get validated connection config (raises if not all set)
-        conn = self._config.get_connection()
+        conn = self._validator.get_connection()
 
         # Create driver
         self._driver = neo4j.GraphDatabase.driver(
@@ -564,7 +646,7 @@ class Neo4jContextProvider(ContextProvider):
             # Not iterable, treat as scalar
             return f"[{key}: {value}]"
 
-    async def _search(self, query_text: str) -> RetrieverResult:
+    async def _execute_search(self, query_text: str) -> RetrieverResult:
         """Execute search using the configured retriever."""
         if self._retriever is None:
             raise ValueError("Retriever not initialized")
@@ -573,7 +655,7 @@ class Neo4jContextProvider(ContextProvider):
         return await asyncio.to_thread(
             self._retriever.search,
             query_text=query_text,
-            top_k=self._top_k,
+            top_k=self._search.top_k,
         )
 
     def _build_scope_filter_cypher(self) -> tuple[str, dict[str, Any]]:
@@ -584,16 +666,17 @@ class Neo4jContextProvider(ContextProvider):
         """
         conditions: list[str] = []
         params: dict[str, Any] = {}
+        scope = self._scope
 
-        if self.application_id:
+        if scope.application_id:
             conditions.append("m.application_id = $application_id")
-            params["application_id"] = self.application_id
-        if self.agent_id:
+            params["application_id"] = scope.application_id
+        if scope.agent_id:
             conditions.append("m.agent_id = $agent_id")
-            params["agent_id"] = self.agent_id
-        if self.user_id:
+            params["agent_id"] = scope.agent_id
+        if scope.user_id:
             conditions.append("m.user_id = $user_id")
-            params["user_id"] = self.user_id
+            params["user_id"] = scope.user_id
         if self._effective_thread_id:
             conditions.append("m.thread_id = $thread_id")
             params["thread_id"] = self._effective_thread_id
@@ -617,9 +700,10 @@ class Neo4jContextProvider(ContextProvider):
             return []
 
         where_clause, params = self._build_scope_filter_cypher()
-        params["top_k"] = self._top_k
+        params["top_k"] = self._search.top_k
+        memory_label = self._memory.label
 
-        embedder = self._config.embedder
+        embedder = self._search.embedder
         if embedder is not None:
             # Vector similarity search on Memory nodes
             query_embedding = await asyncio.to_thread(embedder.embed_query, query_text)
@@ -627,7 +711,7 @@ class Neo4jContextProvider(ContextProvider):
 
             # Use vector index if available, otherwise compute similarity
             cypher = f"""
-            MATCH (m:{self._memory_label})
+            MATCH (m:{memory_label})
             WHERE {where_clause}
             AND m.embedding IS NOT NULL
             WITH m, gds.similarity.cosine(m.embedding, $query_embedding) AS score
@@ -638,7 +722,7 @@ class Neo4jContextProvider(ContextProvider):
         else:
             # Fallback: return recent memories by timestamp
             cypher = f"""
-            MATCH (m:{self._memory_label})
+            MATCH (m:{memory_label})
             WHERE {where_clause}
             ORDER BY m.timestamp DESC
             LIMIT $top_k
@@ -688,7 +772,7 @@ class Neo4jContextProvider(ContextProvider):
             return Context()
 
         # Take recent messages (like Azure AI Search's agentic mode)
-        recent_messages = filtered_messages[-self._message_history_count :]
+        recent_messages = filtered_messages[-self._search.message_history_count :]
 
         # CRITICAL: Concatenate full message text - NO ENTITY EXTRACTION
         query_text = "\n".join(msg.text for msg in recent_messages if msg.text)
@@ -699,16 +783,16 @@ class Neo4jContextProvider(ContextProvider):
         context_messages: list[ChatMessage] = []
 
         # Perform knowledge graph search using retriever
-        result = await self._search(query_text)
+        result = await self._execute_search(query_text)
         if result.items:
-            context_messages.append(ChatMessage(role=Role.USER, text=self._context_prompt))
+            context_messages.append(ChatMessage(role=Role.USER, text=self._search.context_prompt))
             formatted_results = self._format_retriever_result(result)
             for text in formatted_results:
                 if text:
                     context_messages.append(ChatMessage(role=Role.USER, text=text))
 
         # Search memories if memory is enabled
-        if self._memory_enabled:
+        if self._memory.enabled:
             memories = await self._search_memories(query_text)
             if memories:
                 memory_prompt = "## Conversation Memory\nRelevant information from past conversations:"
@@ -724,6 +808,100 @@ class Neo4jContextProvider(ContextProvider):
 
         return Context(messages=context_messages)
 
+    async def _ensure_memory_indexes(self) -> None:
+        """Create memory indexes if they don't exist (lazy initialization).
+
+        Following the RedisProvider pattern, this method is called on first
+        memory operation and creates necessary indexes for efficient search.
+        Uses IF NOT EXISTS for idempotency.
+
+        Creates:
+        - Vector index on Memory.embedding (if embedder configured)
+        - Fulltext index on Memory.text
+        - Standard indexes on scoping fields (user_id, thread_id, etc.)
+
+        Raises:
+            ValueError: If driver not initialized or index creation fails.
+        """
+        mem = self._memory
+
+        # Skip if already initialized (unless overwrite requested)
+        if self._memory_indexes_initialized and not mem.overwrite_index:
+            return
+
+        if self._driver is None:
+            raise ValueError("Driver not initialized - cannot create memory indexes")
+
+        # Build list of index creation statements
+        # Following modern Cypher syntax (no deprecated features)
+        index_statements: list[str] = []
+
+        # Vector index (if embedder configured) - requires Neo4j 5.11+
+        embedder = self._search.embedder
+        if embedder is not None:
+            # Get embedding dimensions by generating a test embedding
+            test_embedding = await asyncio.to_thread(embedder.embed_query, "test")
+            dimensions = len(test_embedding)
+
+            if mem.overwrite_index:
+                # Drop existing index first if overwrite requested
+                index_statements.append(f"DROP INDEX {mem.vector_index_name} IF EXISTS")
+
+            # Create vector index with proper configuration
+            # Note: Neo4j 5.11+ syntax for vector indexes
+            index_statements.append(f"""
+                CREATE VECTOR INDEX {mem.vector_index_name} IF NOT EXISTS
+                FOR (m:{mem.label})
+                ON m.embedding
+                OPTIONS {{
+                    indexConfig: {{
+                        `vector.dimensions`: {dimensions},
+                        `vector.similarity_function`: 'cosine'
+                    }}
+                }}
+            """)
+
+        # Fulltext index on text property
+        if mem.overwrite_index:
+            index_statements.append(f"DROP INDEX {mem.fulltext_index_name} IF EXISTS")
+
+        index_statements.append(f"""
+            CREATE FULLTEXT INDEX {mem.fulltext_index_name} IF NOT EXISTS
+            FOR (m:{mem.label})
+            ON EACH [m.text]
+        """)
+
+        # Standard indexes on scoping fields for efficient filtering
+        scoping_fields = ["user_id", "thread_id", "agent_id", "application_id"]
+        for field in scoping_fields:
+            index_name = f"memory_{field}"
+            if mem.overwrite_index:
+                index_statements.append(f"DROP INDEX {index_name} IF EXISTS")
+            index_statements.append(f"""
+                CREATE INDEX {index_name} IF NOT EXISTS
+                FOR (m:{mem.label})
+                ON (m.{field})
+            """)
+
+        # Execute index creation statements
+        def _execute_index_creation() -> None:
+            with self._driver.session() as session:  # type: ignore[union-attr]
+                for statement in index_statements:
+                    try:
+                        session.run(statement.strip())
+                    except Exception as e:
+                        # Provide helpful error for common issues
+                        error_msg = str(e).lower()
+                        if "vector" in error_msg and "not supported" in error_msg:
+                            raise ValueError(
+                                f"Vector index creation failed. Neo4j 5.11+ required. "
+                                f"Original error: {e}"
+                            ) from e
+                        raise
+
+        await asyncio.to_thread(_execute_index_creation)
+        self._memory_indexes_initialized = True
+
     async def _store_memories(self, messages: list[ChatMessage]) -> None:
         """Store messages as Memory nodes in Neo4j.
 
@@ -736,11 +914,14 @@ class Neo4jContextProvider(ContextProvider):
         if not messages or self._driver is None:
             return
 
+        mem = self._memory
+        scope = self._scope
+
         # Filter to configured roles with non-empty text
         memories_to_store: list[dict[str, Any]] = []
         for msg in messages:
             role_value = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
-            if role_value not in self._memory_roles:
+            if role_value not in mem.roles:
                 continue
             if not msg.text or not msg.text.strip():
                 continue
@@ -751,9 +932,9 @@ class Neo4jContextProvider(ContextProvider):
                 "role": role_value,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 # Scoping fields
-                "application_id": self.application_id,
-                "agent_id": self.agent_id,
-                "user_id": self.user_id,
+                "application_id": scope.application_id,
+                "agent_id": scope.agent_id,
+                "user_id": scope.user_id,
                 "thread_id": self._effective_thread_id,
             }
 
@@ -769,7 +950,7 @@ class Neo4jContextProvider(ContextProvider):
             return
 
         # Generate embeddings if embedder is configured (for vector search on memories)
-        embedder = self._config.embedder
+        embedder = self._search.embedder
         if embedder is not None:
             texts = [m["text"] for m in memories_to_store]
             # neo4j-graphrag embedders are sync, wrap with asyncio.to_thread
@@ -787,7 +968,7 @@ class Neo4jContextProvider(ContextProvider):
         # Use UNWIND for batch creation
         cypher = f"""
         UNWIND $memories AS memory
-        CREATE (m:{self._memory_label})
+        CREATE (m:{mem.label})
         SET m.id = memory.id,
             m.text = memory.text,
             m.role = memory.role,
@@ -834,8 +1015,11 @@ class Neo4jContextProvider(ContextProvider):
             **kwargs: Additional keyword arguments (unused).
         """
         # Skip if memory is disabled or not connected
-        if not self._memory_enabled or self._driver is None:
+        if not self._memory.enabled or self._driver is None:
             return
+
+        # Ensure memory indexes exist (lazy initialization - first use creates indexes)
+        await self._ensure_memory_indexes()
 
         # Convert to lists (following Mem0/Redis patterns)
         request_list = (
