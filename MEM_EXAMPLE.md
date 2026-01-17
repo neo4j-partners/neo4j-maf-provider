@@ -7,7 +7,7 @@ This proposal outlines adding a new example demonstrating how to use the Neo4j C
 | Phase | Status | Description |
 |-------|--------|-------------|
 | Phase 1A | **Complete** | Provider changes to support memory storage and retrieval |
-| Phase 1B | **In Progress** | Provider index management (complete) and sample application (pending) |
+| Phase 1B | **Complete** | Provider index management and sample application |
 | Phase 2 | Pending | Hierarchical memory with graph relationships |
 
 ## Background
@@ -214,13 +214,13 @@ If index creation fails (e.g., wrong Neo4j version for vector indexes), the prov
 - [x] Document Neo4j version requirement (5.11+ for vector indexes) in error message
 
 #### Sample Application
-- [ ] Create `samples/memory_basic/` directory
-- [ ] Create `demo.py` showing basic memory in action
-- [ ] Demonstrate memory storage across multiple conversation turns
-- [ ] Demonstrate memory retrieval providing context from past conversations
-- [ ] Show scoping in action (user A memories separate from user B)
-- [ ] Create `README.md` with usage instructions
-- [ ] Add sample to the start-samples menu in `pyproject.toml`
+- [x] Create `samples/memory_basic/` directory
+- [x] Create `demo.py` showing basic memory in action
+- [x] Demonstrate memory storage across multiple conversation turns
+- [x] Demonstrate memory retrieval providing context from past conversations
+- [x] Show scoping in action (user A memories separate from user B)
+- [x] Create `README.md` with usage instructions
+- [x] Add sample to the start-samples menu in `pyproject.toml`
 
 #### Demo Script Structure
 
@@ -240,17 +240,17 @@ The demo script would:
 - [x] Test memory indexes not initialized initially
 - [x] Test `_ensure_memory_indexes()` raises when not connected
 - [x] Test `_ensure_memory_indexes()` skips when already initialized
-- [ ] Verify memories are stored after each invocation (requires Neo4j connection)
-- [ ] Verify memories are retrieved based on conversation relevance
-- [ ] Verify scoping filters work correctly (user A cannot see user B memories)
+- [x] Verify memories are stored after each invocation (requires Neo4j connection)
+- [x] Verify memories are retrieved based on conversation relevance
+- [x] Verify scoping filters work correctly (user A cannot see user B memories)
 - [ ] Test with both vector and fulltext search modes
 
 #### Documentation
-- [ ] Write README for memory_basic sample
-- [ ] Document that indexes are created automatically
-- [ ] Document Neo4j version requirements (5.11+ for vector)
-- [ ] Document optional index configuration parameters
-- [ ] Add troubleshooting section for common issues
+- [x] Write README for memory_basic sample
+- [x] Document that indexes are created automatically
+- [x] Document Neo4j version requirements (5.11+ for vector)
+- [x] Document optional index configuration parameters
+- [x] Add troubleshooting section for common issues
 
 ---
 

@@ -84,21 +84,11 @@ Add your Neo4j database credentials to `.env`:
 
 ### Financial Documents Database (samples 1-5)
 
-```
-NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your-password
-NEO4J_VECTOR_INDEX_NAME=chunkEmbeddings
-NEO4J_FULLTEXT_INDEX_NAME=search_chunks
-```
+See [SETUP.md](SETUP.md) for instructions on setting up the Neo4j database with financial data.
 
 ### Aircraft Database (samples 6-8)
 
-```
-AIRCRAFT_NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
-AIRCRAFT_NEO4J_USERNAME=neo4j
-AIRCRAFT_NEO4J_PASSWORD=your-password
-```
+For aircraft database access, please contact the author.
 
 ## 3. Run Samples
 

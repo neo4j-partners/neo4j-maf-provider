@@ -27,6 +27,7 @@ def _get_demos() -> dict[str, DemoFunc]:
     from samples.basic_fulltext.azure_thread_memory import demo_azure_thread_memory
     from samples.basic_fulltext.main import demo_context_provider_basic
     from samples.graph_enriched.main import demo_context_provider_graph_enriched
+    from samples.memory_basic.main import demo_memory_basic
     from samples.vector_search.main import demo_context_provider_vector
     from samples.vector_search.semantic_search import demo_semantic_search
 
@@ -39,6 +40,7 @@ def _get_demos() -> dict[str, DemoFunc]:
         "6": demo_aircraft_maintenance_search,
         "7": demo_aircraft_flight_delays,
         "8": demo_component_health,
+        "9": demo_memory_basic,
     }
 
 
@@ -60,15 +62,18 @@ def print_menu() -> str | None:
     print("  7. Flight Delay Analysis")
     print("  8. Component Health Analysis")
     print("")
+    print("  -- Memory Provider --")
+    print("  9. Neo4j Memory Provider")
+    print("")
     print("  A. Run all demos")
     print("  0. Exit\n")
 
     try:
-        choice = input("Enter your choice (0-8, A): ").strip().upper()
-        if choice in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "A"):
+        choice = input("Enter your choice (0-9, A): ").strip().upper()
+        if choice in ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A"):
             return choice
         else:
-            print("\nInvalid choice. Please enter 0-8 or A.")
+            print("\nInvalid choice. Please enter 0-9 or A.")
             return None
     except (KeyboardInterrupt, EOFError):
         print("\n")
@@ -105,6 +110,7 @@ Examples:
   uv run start-samples 6      Run demo 6 (Aircraft Maintenance Search)
   uv run start-samples 7      Run demo 7 (Flight Delay Analysis)
   uv run start-samples 8      Run demo 8 (Component Health Analysis)
+  uv run start-samples 9      Run demo 9 (Neo4j Memory Provider)
   uv run start-samples a      Run all demos
 """,
     )
@@ -112,8 +118,8 @@ Examples:
         "demo",
         nargs="?",
         type=str,
-        choices=["1", "2", "3", "4", "5", "6", "7", "8", "a", "A"],
-        help="Demo to run: 1-5=Financial, 6-8=Aircraft, a=All",
+        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "A"],
+        help="Demo to run: 1-5=Financial, 6-8=Aircraft, 9=Memory, a=All",
     )
     args = parser.parse_args()
 
