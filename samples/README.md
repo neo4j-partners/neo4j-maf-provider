@@ -109,6 +109,7 @@ uv run start-samples 5   # Context Provider (Graph-Enriched)
 uv run start-samples 6   # Aircraft Maintenance Search
 uv run start-samples 7   # Flight Delay Analysis
 uv run start-samples 8   # Component Health Analysis
+uv run start-samples 9   # Neo4j Memory Provider
 uv run start-samples a   # Run all demos
 ```
 
@@ -136,6 +137,33 @@ Domain-specific samples using an aircraft maintenance database:
 - **flight_delays.py** - Analyze flight delays with route information
 - **component_health.py** - Component health analysis with system hierarchy
 
+### Memory Provider (`memory_basic/`)
+
+Demonstrates persistent agent memory using Neo4j as the storage backend:
+
+- **main.py** - Complete memory demonstration showing:
+  - Memory storage after each model invocation
+  - Cross-conversation memory retrieval
+  - User-scoped memory isolation
+  - Semantic search for relevant memories
+
+**Key Features:**
+- Memories persist across conversation sessions
+- Semantic vector search finds related memories even with different phrasing
+- User isolation prevents cross-user data leakage
+- Indexes created automatically on first use (lazy initialization)
+
+**Example output:**
+```
+[Query] What's my dog's name?
+  Expected: Should recall: Max, golden retriever
+  Agent: Your dog's name is Max. He's a golden retriever who loves to play fetch!
+
+[Query] Do I have any pets?
+  Note: Semantically related to 'golden retriever named Max'
+  Agent: Yes, you have a golden retriever named Max who loves to play fetch.
+```
+
 ## Directory Structure
 
 ```
@@ -145,11 +173,13 @@ samples/
 ├── infra/                  # Azure Bicep templates
 │   └── main.bicep          # AI Services, Project, and model deployments
 ├── scripts/                # Setup helper scripts
-├── basic_fulltext/         # Fulltext search samples
-├── vector_search/          # Vector similarity samples
-├── graph_enriched/         # Graph traversal samples
-├── aircraft_domain/        # Aircraft maintenance samples
-└── shared/                 # Shared utilities (agent config, CLI, logging)
+├── src/samples/
+│   ├── basic_fulltext/     # Fulltext search samples
+│   ├── vector_search/      # Vector similarity samples
+│   ├── graph_enriched/     # Graph traversal samples
+│   ├── aircraft_domain/    # Aircraft maintenance samples
+│   ├── memory_basic/       # Neo4j memory provider sample
+│   └── shared/             # Shared utilities (agent config, CLI, logging)
 ```
 
 ## Troubleshooting
@@ -178,6 +208,6 @@ With serverless models, you only pay for what you use:
 
 - **Chat model (GPT-4o)**: ~$0.01-0.03 per 1K tokens
 - **Embedding model**: ~$0.0001 per 1K tokens
-- **Running all 8 demos**: approximately $0.05-0.20 total
+- **Running all 9 demos**: approximately $0.10-0.30 total
 
 No idle costs - the AI Services account itself has no ongoing charges when not in use.

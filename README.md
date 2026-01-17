@@ -47,6 +47,7 @@ This provider connects AI agents to Neo4j knowledge graphs. It supports:
 |------|-------------|
 | **Basic** | Returns search results directly |
 | **Graph-Enriched** | Traverses relationships after search for rich context |
+| **Memory** | Stores and retrieves conversation history for persistent agent memory |
 
 **Key design principles:**
 - **No entity extraction** - Full message text is passed to the search index; Neo4j handles relevance ranking
@@ -162,6 +163,34 @@ These samples use a separate Neo4j database with Aircraft, System, Component, Ma
 | [**Flight Delays**](samples/src/samples/aircraft_domain/flight_delays.py) | Searches flight delay records by cause (weather, security). Graph traversal enriches results with flight number, aircraft, and route (origin → destination airports), enabling operations analysis like "What flights were delayed due to weather?" | `index_type="fulltext"`, `index_name="delay_search"`, `retrieval_query` traverses `Delay ← Flight → Aircraft/Airport`, `top_k=2` |
 | [**Component Health**](samples/src/samples/aircraft_domain/component_health.py) | Searches aircraft components by name/type (turbine, fuel pump). Graph traversal enriches results with the parent system, aircraft, and maintenance event count, enabling health analysis like "What turbine components have maintenance issues?" | `index_type="fulltext"`, `index_name="component_search"`, `retrieval_query` traverses `Component ← System ← Aircraft` and counts `MaintenanceEvent` nodes |
 
+### Memory Provider
+
+This sample demonstrates persistent agent memory using Neo4j as the storage backend.
+
+| Sample | Description | Context Provider Configuration |
+|--------|-------------|-------------------------------|
+| [**Neo4j Memory**](samples/src/samples/memory_basic/main.py) | Stores conversation memories in Neo4j and retrieves them across sessions using semantic vector search. Demonstrates cross-conversation memory persistence, user-scoped isolation, and semantic recall (finding related memories even with different phrasing). | `memory_enabled=True`, `user_id="..."`, requires `AzureAIEmbedder` for semantic search |
+
+**Memory Features:**
+- **Persistent storage**: Memories stored as `Memory` nodes in Neo4j with embeddings
+- **Semantic retrieval**: Vector similarity search finds relevant past conversations
+- **User isolation**: Scoping by `user_id`, `thread_id`, `agent_id`, or `application_id`
+- **Lazy initialization**: Indexes created automatically on first use
+
+**Example:**
+```python
+provider = Neo4jContextProvider(
+    uri=settings.uri,
+    username=settings.username,
+    password=settings.get_password(),
+    memory_enabled=True,
+    user_id="alice",  # Scope memories to this user
+    index_name="search_chunks",
+    index_type="fulltext",
+    embedder=embedder,  # For semantic memory search
+)
+```
+
 ## Development
 
 ### Run Tests
@@ -255,6 +284,7 @@ Demo applications in `samples/` showing the library in action:
 - Vector similarity search
 - Graph-enriched context
 - Aircraft domain examples
+- **Neo4j memory provider** - Persistent agent memory with semantic retrieval
 
 See [samples/README.md](samples/README.md) for setup and usage.
 
