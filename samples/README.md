@@ -115,54 +115,221 @@ uv run start-samples a   # Run all demos
 
 ## Available Samples
 
-### Basic Fulltext (`basic_fulltext/`)
+### Sample 1: Azure Thread Memory (`basic_fulltext/azure_thread_memory.py`)
 
-- **main.py** - Basic fulltext search context provider
-- **azure_thread_memory.py** - Azure Agent Framework thread memory demo
+Demonstrates Azure's built-in conversation memory within a single thread. This sample does **not** use Neo4j—it shows how the Microsoft Agent Framework maintains context across conversation turns using Azure-managed threads.
 
-### Vector Search (`vector_search/`)
+**What it shows:**
+- Creating an agent with Azure AI Foundry
+- Using threads to maintain conversation state
+- Multi-turn conversations where the agent recalls previous messages
 
-- **main.py** - Vector similarity search with embeddings
-- **semantic_search.py** - Semantic search capabilities
+**Example flow:**
+```
+[Turn 1] User: Hello! My name is Wayne and I love horses.
+[Turn 2] User: What is my name and what do I enjoy?
+         Agent: Your name is Wayne and you enjoy horses!
+[Turn 3] User: Can you suggest recommendations for my passion?
+         Agent: Here are some horse-related recommendations...
+```
 
-### Graph Enriched (`graph_enriched/`)
+---
 
-- **main.py** - Graph traversal after initial search for rich context
+### Sample 2: Semantic Search (`vector_search/semantic_search.py`)
 
-### Aircraft Domain (`aircraft_domain/`)
+Direct semantic search demonstration without an agent. Shows the raw search capabilities of the `Neo4jContextProvider` with vector embeddings and graph enrichment.
 
-Domain-specific samples using an aircraft maintenance database:
+**What it shows:**
+- Vector similarity search using Azure AI embeddings
+- Graph traversal to enrich results with company and risk factor data
+- Raw search result output (scores, metadata, text previews)
 
-- **maintenance_search.py** - Search maintenance events with aircraft context
-- **flight_delays.py** - Analyze flight delays with route information
-- **component_health.py** - Component health analysis with system hierarchy
+**Graph pattern:**
+```
+Chunk -[:FROM_DOCUMENT]-> Document <-[:FILED]- Company -[:FACES_RISK]-> RiskFactor
+```
 
-### Memory Provider (`memory_basic/`)
+**Use case:** Understanding how the provider retrieves and enriches data before passing it to an agent.
 
-Demonstrates persistent agent memory using Neo4j as the storage backend:
+---
 
-- **main.py** - Complete memory demonstration showing:
-  - Memory storage after each model invocation
-  - Cross-conversation memory retrieval
-  - User-scoped memory isolation
-  - Semantic search for relevant memories
+### Sample 3: Context Provider - Fulltext (`basic_fulltext/main.py`)
 
-**Key Features:**
-- Memories persist across conversation sessions
-- Semantic vector search finds related memories even with different phrasing
-- User isolation prevents cross-user data leakage
-- Indexes created automatically on first use (lazy initialization)
+Basic fulltext search context provider integrated with a ChatAgent. Uses Neo4j's fulltext index to find relevant document chunks based on keyword matching.
+
+**What it shows:**
+- Creating a `Neo4jContextProvider` with `index_type="fulltext"`
+- Automatic context injection into agent conversations
+- No embeddings required—uses native fulltext search
+
+**Configuration:**
+```python
+provider = Neo4jContextProvider(
+    index_name="search_chunks",
+    index_type="fulltext",
+    top_k=3,
+)
+```
+
+**Best for:** Fast keyword-based retrieval when exact term matching is sufficient.
+
+---
+
+### Sample 4: Context Provider - Vector (`vector_search/main.py`)
+
+Vector similarity search context provider with a ChatAgent. Uses Azure AI embeddings to find semantically similar content even when exact keywords don't match.
+
+**What it shows:**
+- Creating a `Neo4jContextProvider` with `index_type="vector"`
+- Integrating the `AzureAIEmbedder` for query embedding
+- Semantic matching (e.g., "challenges" finds content about "risk factors")
+
+**Configuration:**
+```python
+provider = Neo4jContextProvider(
+    index_name="chunkEmbeddings",
+    index_type="vector",
+    embedder=embedder,
+    top_k=5,
+)
+```
+
+**Best for:** Finding conceptually related content where phrasing varies.
+
+---
+
+### Sample 5: Context Provider - Graph-Enriched (`graph_enriched/main.py`)
+
+Vector search combined with graph traversal for rich context. After finding relevant chunks, a custom Cypher query traverses relationships to gather company names, tickers, products, and risk factors.
+
+**What it shows:**
+- Using `retrieval_query` for post-search graph enrichment
+- Returning structured metadata alongside text content
+- Agent responses that cite specific companies, products, and risks
+
+**Graph pattern:**
+```
+Chunk -[:FROM_DOCUMENT]-> Document <-[:FILED]- Company
+Company -[:FACES_RISK]-> RiskFactor
+Company -[:MENTIONS]-> Product
+```
+
+**Retrieval query returns:** `text`, `score`, `company`, `ticker`, `risks[]`, `products[]`
+
+**Best for:** Applications requiring rich, structured context from interconnected graph data.
+
+---
+
+### Sample 6: Aircraft Maintenance Search (`aircraft_domain/maintenance_search.py`)
+
+Fulltext search on aircraft maintenance events with graph enrichment. Searches fault descriptions and corrective actions, then traverses the graph to provide aircraft, system, and component context.
+
+**What it shows:**
+- Domain-specific fulltext search configuration
+- Graph traversal through the aircraft hierarchy
+- Structured maintenance records for agent analysis
+
+**Graph pattern:**
+```
+MaintenanceEvent <-[:HAS_EVENT]- Component <-[:HAS_COMPONENT]- System <-[:HAS_SYSTEM]- Aircraft
+```
+
+**Retrieval query returns:** `fault`, `corrective_action`, `severity`, `aircraft`, `model`, `system`, `component`
+
+**Example queries:** "What maintenance issues involve vibration?", "Tell me about electrical faults"
+
+---
+
+### Sample 7: Flight Delay Analysis (`aircraft_domain/flight_delays.py`)
+
+Fulltext search on flight delays with route and aircraft context. Searches delay causes and enriches results with flight numbers, aircraft tail numbers, and origin/destination routes.
+
+**What it shows:**
+- Searching delay records by cause keywords
+- Combining delay data with flight and route information
+- Minimal context configuration (`top_k=2`, `message_history_count=1`) to avoid token overflow
+
+**Graph pattern:**
+```
+Delay <-[:HAS_DELAY]- Flight -[:OPERATES_FLIGHT]-> Aircraft
+Flight -[:DEPARTS_FROM]-> Origin Airport
+Flight -[:ARRIVES_AT]-> Destination Airport
+```
+
+**Retrieval query returns:** `cause`, `minutes`, `flight`, `aircraft`, `route` (e.g., "LAX -> JFK")
+
+**Example queries:** "What flights were delayed due to weather?", "Tell me about security-related delays"
+
+---
+
+### Sample 8: Component Health Analysis (`aircraft_domain/component_health.py`)
+
+Fulltext search on aircraft components with maintenance history. Searches component names and types, then aggregates maintenance event counts and severity levels.
+
+**What it shows:**
+- Searching the component hierarchy
+- Aggregating related maintenance events (`count(event)`, `last_severity`)
+- Component-centric view of aircraft health
+
+**Graph pattern:**
+```
+Component <-[:HAS_COMPONENT]- System <-[:HAS_SYSTEM]- Aircraft
+Component -[:HAS_EVENT]-> MaintenanceEvent
+```
+
+**Retrieval query returns:** `component`, `type`, `aircraft`, `system`, `maintenance_events`, `severity`
+
+**Example queries:** "What turbine components have maintenance issues?", "Tell me about fuel pump components"
+
+---
+
+### Sample 9: Neo4j Memory Provider (`memory_basic/main.py`)
+
+Persistent agent memory using Neo4j as the storage backend. Memories are stored as nodes with vector embeddings, enabling semantic retrieval across conversation sessions.
+
+**What it shows:**
+- Memory storage after each model invocation (auto-triggered by `invoked()`)
+- Cross-conversation memory retrieval (new thread, same user)
+- User-scoped memory isolation (user A cannot see user B's memories)
+- Semantic search finds related memories even with different phrasing
+
+**Memory flow:**
+1. User shares facts in conversation 1 → stored as Memory nodes
+2. User starts conversation 2 (different thread) → agent recalls facts
+3. Different user asks same questions → no memories found (isolation)
+
+**Configuration:**
+```python
+provider = Neo4jContextProvider(
+    memory_enabled=True,
+    user_id="user_alice",
+    embedder=embedder,
+    ...
+)
+```
 
 **Example output:**
 ```
-[Query] What's my dog's name?
-  Expected: Should recall: Max, golden retriever
-  Agent: Your dog's name is Max. He's a golden retriever who loves to play fetch!
+Part 1: Alice shares facts
+  "I have a golden retriever named Max who loves to play fetch."
+  → Stored as Memory node with vector embedding
 
-[Query] Do I have any pets?
-  Note: Semantically related to 'golden retriever named Max'
-  Agent: Yes, you have a golden retriever named Max who loves to play fetch.
+Part 2: New conversation, same user
+  [Query] What's my dog's name?
+    Agent: Your dog's name is Max. He's a golden retriever!
+
+Part 3: Semantic search demonstration
+  [Query] Do I have any pets?
+    Note: Different words, but semantically finds "golden retriever named Max"
+    Agent: Yes, you have a golden retriever named Max.
+
+Part 4: User isolation
+  [Bob asks] What's my dog's name?
+    Agent: I don't have any information about your pets.
+    [PASS] Bob cannot see Alice's memories
 ```
+
+**Best for:** Building agents that remember users across sessions—personal assistants, customer support, tutoring systems.
 
 ## Directory Structure
 
