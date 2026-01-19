@@ -54,24 +54,39 @@ This provider connects AI agents to Neo4j knowledge graphs. It supports:
 - **Index-driven configuration** - Works with any Neo4j index; configure `index_name` and `index_type`
 - **Configurable graph enrichment** - Custom Cypher queries traverse relationships after initial search
 
-## Installation
+## Standalone Installation
+
+To use the Neo4j Context Provider in your own project, install from PyPI:
 
 ```bash
+# Using pip
 pip install agent-framework-neo4j --pre
+
+# Using uv
+uv add agent-framework-neo4j --prerelease=allow
 
 # With Azure AI embeddings support
 pip install agent-framework-neo4j[azure] --pre
+# or
+uv add agent-framework-neo4j[azure] --prerelease=allow
 ```
 
-## Setting up Neo4j
+
+## Running the Neo4j MAF Provider Samples
+
+This section is for running the included sample applications to see the context provider in action. If you just want to use the library in your own project, see [Standalone Installation](#standalone-installation) above.
+
+### Step 1: Setting up Neo4j
+
+The samples use the financial data knowledge graph. See [samples/SETUP.md](samples/SETUP.md) for instructions on setting up the financial data knowledge graph.
 
 You have several options to set up Neo4j:
 
-### Option A: Neo4j AuraDB (Recommended)
+#### Option A: Neo4j AuraDB (Recommended)
 
 Get a free cloud instance at https://neo4j.com/cloud/aura-free/
 
-### Option B: Local Neo4j with Docker
+#### Option B: Local Neo4j with Docker
 
 ```bash
 docker run --name neo4j \
@@ -80,26 +95,22 @@ docker run --name neo4j \
   -d neo4j:5
 ```
 
-### Option C: Neo4j Desktop
+#### Option C: Neo4j Desktop
 
 Download from https://neo4j.com/download/
 
-## Getting Started with the Neo4j MAF Provider
-
-Follow these steps to run the sample applications and see the context provider in action.
-
-### Step 1: Install Dependencies
+### Step 2: Install Dependencies
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourorg/neo4j-maf-provider.git
+git clone https://github.com/neo4j-partners/neo4j-maf-provider.git
 cd neo4j-maf-provider
 
 # Install all workspace packages
 uv sync --prerelease=allow
 ```
 
-### Step 2: Provision Azure Infrastructure
+### Step 3: Provision Azure Infrastructure
 
 The samples use Azure AI Foundry serverless models. You need to provision a Foundry project and deploy models.
 
@@ -120,7 +131,7 @@ This provisions:
 - **Azure AI Project** - A Microsoft Foundry project for managing model endpoints
 - **Serverless Models** - GPT-4o for chat, text-embedding-ada-002 for embeddings
 
-### Step 3: Configure Neo4j
+### Step 4: Configure Neo4j
 
 Add your Neo4j database credentials to `samples/.env`:
 
@@ -130,9 +141,7 @@ NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your-password
 ```
 
-See [samples/SETUP.md](samples/SETUP.md) for instructions on setting up the financial data knowledge graph.
-
-### Step 4: Run the Samples
+### Step 5: Run the Samples
 
 ```bash
 uv run start-samples      # Interactive menu
