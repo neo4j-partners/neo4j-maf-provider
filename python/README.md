@@ -2,7 +2,9 @@
 
 A context provider that enables AI agents to retrieve knowledge from Neo4j graph databases.
 
-## Quick Start
+## Quick Start for Standalone Usage
+
+This is a quick start guide for using the Neo4j Context Provider as a standalone package. For full samples and demos, see the [Running the Samples](#running-the-samples) section below.
 
 ### Installation
 

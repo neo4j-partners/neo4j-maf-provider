@@ -41,30 +41,6 @@ AI model responds with knowledge from your data
 | **Python** | Available | [python/README.md](python/README.md) |
 | **.NET** | Planned | Coming soon |
 
-## Quick Start (Python)
-
-```bash
-pip install agent-framework-neo4j --pre
-```
-
-```python
-from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
-
-settings = Neo4jSettings()  # Loads from environment
-
-provider = Neo4jContextProvider(
-    uri=settings.uri,
-    username=settings.username,
-    password=settings.get_password(),
-    index_name="chunkEmbeddings",
-    index_type="vector",
-    embedder=my_embedder,
-)
-
-async with provider:
-    # Use with Microsoft Agent Framework
-    pass
-```
 
 See [python/README.md](python/README.md) for complete documentation.
 
