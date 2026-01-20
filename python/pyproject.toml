@@ -3,7 +3,6 @@ name = "neo4j-maf-provider-workspace"
 version = "0.1.0"
 description = "Neo4j Context Provider workspace for Microsoft Agent Framework"
 requires-python = ">=3.10"
-readme = "README.md"
 license = { text = "MIT" }
 
 [tool.uv.workspace]

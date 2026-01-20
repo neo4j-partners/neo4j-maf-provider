@@ -10,25 +10,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **UV workspace monorepo** containing the Neo4j Context Provider for Microsoft Agent Framework. Context providers are plugins that automatically inject relevant information into an agent's conversation before the AI model processes each message. This provider retrieves data from Neo4j knowledge graphs using vector or fulltext search, with optional graph traversal for rich context.
+This is a **dual-language monorepo** containing the Neo4j Context Provider for Microsoft Agent Framework. Context providers are plugins that automatically inject relevant information into an agent's conversation before the AI model processes each message. This provider retrieves data from Neo4j knowledge graphs using vector or fulltext search, with optional graph traversal for rich context.
 
 ### Repository Structure
 
 ```
 neo4j-maf-provider/
-├── packages/agent-framework-neo4j/   # Publishable PyPI library
-│   └── agent_framework_neo4j/        # Library source code
-├── samples/                           # Demo applications (self-contained)
-│   ├── azure.yaml                     # azd configuration
-│   ├── infra/                         # Azure Bicep templates
-│   ├── scripts/                       # Setup scripts
-│   ├── basic_fulltext/
-│   ├── vector_search/
-│   ├── graph_enriched/
-│   ├── aircraft_domain/
-│   └── shared/
-├── tests/                             # Library tests
-└── docs/                              # Documentation
+├── python/                            # Python implementation
+│   ├── packages/agent-framework-neo4j/   # Publishable PyPI library
+│   │   └── agent_framework_neo4j/        # Library source code
+│   ├── samples/                           # Demo applications (self-contained)
+│   │   ├── azure.yaml                     # azd configuration
+│   │   ├── infra/                         # Azure Bicep templates
+│   │   ├── scripts/                       # Setup scripts
+│   │   ├── basic_fulltext/
+│   │   ├── vector_search/
+│   │   ├── graph_enriched/
+│   │   ├── aircraft_domain/
+│   │   └── shared/
+│   ├── tests/                             # Library tests
+│   └── docs/                              # Python documentation
+├── dotnet/                            # .NET implementation (planned)
+├── docs/                              # Shared documentation
+├── README.md                          # Project landing page
+├── CONTRIBUTING.md                    # Contribution guidelines
+└── LICENSE
 ```
 
 ### Key Architecture
@@ -39,8 +45,11 @@ neo4j-maf-provider/
 
 ## Commands
 
+All Python commands should be run from the `python/` directory.
+
 ### Setup
 ```bash
+cd python
 uv sync --prerelease=allow     # Install dependencies (pre-release required for Agent Framework)
 
 # Provision Azure infrastructure (from samples directory)
@@ -51,6 +60,7 @@ uv run setup_env.py            # Pull env vars from azd into .env
 
 ### Run Demos
 ```bash
+cd python
 uv run start-samples           # Interactive menu
 uv run start-samples 3         # Run specific demo (1-8)
 uv run start-samples a         # Run all demos
@@ -58,6 +68,7 @@ uv run start-samples a         # Run all demos
 
 ### Development
 ```bash
+cd python
 uv run pytest                  # Run tests
 uv run mypy packages/agent-framework-neo4j/agent_framework_neo4j       # Type check
 uv run ruff check packages/agent-framework-neo4j/agent_framework_neo4j # Lint
@@ -66,6 +77,7 @@ uv run ruff format packages/agent-framework-neo4j/agent_framework_neo4j # Format
 
 ### Build and Publish
 ```bash
+cd python
 uv build --package agent-framework-neo4j    # Build library
 uv publish --package agent-framework-neo4j  # Publish to PyPI
 ```
@@ -76,13 +88,13 @@ uv publish --package agent-framework-neo4j  # Publish to PyPI
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `Neo4jContextProvider` | `packages/.../agent_framework_neo4j/_provider.py` | Main context provider implementing `ContextProvider` interface |
-| `ProviderConfig` | `packages/.../agent_framework_neo4j/_config.py` | Pydantic configuration validation |
-| `MemoryManager` | `packages/.../agent_framework_neo4j/_memory.py` | Memory storage and retrieval operations |
-| `Neo4jSettings` | `packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Neo4j credentials |
-| `AzureAISettings` | `packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Azure AI |
-| `AzureAIEmbedder` | `packages/.../agent_framework_neo4j/_embedder.py` | Azure AI embedding integration |
-| `FulltextRetriever` | `packages/.../agent_framework_neo4j/_fulltext.py` | Fulltext search retriever |
+| `Neo4jContextProvider` | `python/packages/.../agent_framework_neo4j/_provider.py` | Main context provider implementing `ContextProvider` interface |
+| `ProviderConfig` | `python/packages/.../agent_framework_neo4j/_config.py` | Pydantic configuration validation |
+| `MemoryManager` | `python/packages/.../agent_framework_neo4j/_memory.py` | Memory storage and retrieval operations |
+| `Neo4jSettings` | `python/packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Neo4j credentials |
+| `AzureAISettings` | `python/packages/.../agent_framework_neo4j/_settings.py` | Pydantic settings for Azure AI |
+| `AzureAIEmbedder` | `python/packages/.../agent_framework_neo4j/_embedder.py` | Azure AI embedding integration |
+| `FulltextRetriever` | `python/packages/.../agent_framework_neo4j/_fulltext.py` | Fulltext search retriever |
 
 ### Search Flow
 
@@ -156,7 +168,7 @@ async with provider:
 
 ## Module Structure
 
-### Library (`packages/agent-framework-neo4j/`)
+### Library (`python/packages/agent-framework-neo4j/`)
 
 Public API exported from `agent_framework_neo4j`:
 - `Neo4jContextProvider` - Main context provider class
@@ -165,7 +177,7 @@ Public API exported from `agent_framework_neo4j`:
 - `AzureAIEmbedder` - Embedding generator
 - `FulltextRetriever` - Fulltext search retriever
 
-### Samples (`samples/`)
+### Samples (`python/samples/`)
 
 - `basic_fulltext/` - Fulltext search demos
 - `vector_search/` - Vector similarity search demos

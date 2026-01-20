@@ -1,6 +1,6 @@
 # Neo4j Context Provider for Microsoft Agent Framework
 
-A context provider that enables AI agents to retrieve knowledge from Neo4j graph databases.
+A context provider that enables AI agents to retrieve knowledge from Neo4j graph databases. Works with the [Microsoft Agent Framework](https://aka.ms/agent-framework).
 
 ## What is a Context Provider?
 
@@ -8,34 +8,19 @@ Context providers are an extensibility mechanism in the Microsoft Agent Framewor
 
 ```
 User sends message
-       ↓
+       |
 Agent Framework calls context provider's "invoking" method
-       ↓
+       |
 Provider searches external data source for relevant information
-       ↓
+       |
 Provider returns context to the agent
-       ↓
+       |
 Agent sends message + context to the AI model
-       ↓
+       |
 AI model responds with knowledge from your data
 ```
 
-Context providers work behind the scenes to:
-1. **Retrieve relevant information** from external sources (databases, search indexes, APIs)
-2. **Inject that information** into the agent's context before it responds
-3. **Update state or memory** after the agent responds
-
----
-
-**This README covers running the samples.** For other topics:
-- **Building and publishing** the library to PyPI: [docs/PUBLISH.md](docs/PUBLISH.md)
-- **Detailed architecture** and design principles: [docs/architecture.md](docs/architecture.md)
-
----
-
-## The Neo4j Context Provider
-
-This provider connects AI agents to Neo4j knowledge graphs. It supports:
+## Features
 
 | Search Type | Description |
 |-------------|-------------|
@@ -49,222 +34,19 @@ This provider connects AI agents to Neo4j knowledge graphs. It supports:
 | **Graph-Enriched** | Traverses relationships after search for rich context |
 | **Memory** | Stores and retrieves conversation history for persistent agent memory |
 
-**Key design principles:**
-- **No entity extraction** - Full message text is passed to the search index; Neo4j handles relevance ranking
-- **Index-driven configuration** - Works with any Neo4j index; configure `index_name` and `index_type`
-- **Configurable graph enrichment** - Custom Cypher queries traverse relationships after initial search
+## Language Support
 
-## Standalone Installation
+| Language | Status | Documentation |
+|----------|--------|---------------|
+| **Python** | Available | [python/README.md](python/README.md) |
+| **.NET** | Planned | Coming soon |
 
-To use the Neo4j Context Provider in your own project, install from PyPI:
-
-```bash
-# Using pip
-pip install agent-framework-neo4j --pre
-
-# Using uv
-uv add agent-framework-neo4j --prerelease=allow
-
-# With Azure AI embeddings support
-pip install agent-framework-neo4j[azure] --pre
-# or
-uv add agent-framework-neo4j[azure] --prerelease=allow
-```
-
-
-## Running the Neo4j MAF Provider Samples
-
-This section is for running the included sample applications to see the context provider in action. If you just want to use the library in your own project, see [Standalone Installation](#standalone-installation) above.
-
-### Step 1: Setting up Neo4j
-
-The samples use the financial data knowledge graph. See [samples/SETUP.md](samples/SETUP.md) for instructions on setting up the financial data knowledge graph.
-
-You have several options to set up Neo4j:
-
-#### Option A: Neo4j AuraDB (Recommended)
-
-Get a free cloud instance at https://neo4j.com/cloud/aura-free/
-
-#### Option B: Local Neo4j with Docker
-
-```bash
-docker run --name neo4j \
-  -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/password \
-  -d neo4j:5
-```
-
-#### Option C: Neo4j Desktop
-
-Download from https://neo4j.com/download/
-
-### Step 2: Install Dependencies
-
-```bash
-# Clone the repository
-git clone https://github.com/neo4j-partners/neo4j-maf-provider.git
-cd neo4j-maf-provider
-
-# Install all workspace packages
-uv sync --prerelease=allow
-```
-
-### Step 3: Provision Azure Infrastructure
-
-The samples use Azure AI Foundry serverless models. You need to provision a Foundry project and deploy models.
-
-```bash
-cd samples
-
-# Configure your Azure region
-./scripts/setup_azure.sh
-
-# Deploy Azure infrastructure (creates AI Project + model deployments)
-azd up
-
-# Sync Azure environment variables to .env
-uv run setup_env.py
-```
-
-This provisions:
-- **Azure AI Project** - A Microsoft Foundry project for managing model endpoints
-- **Serverless Models** - GPT-4o for chat, text-embedding-ada-002 for embeddings
-
-### Step 4: Configure Neo4j
-
-Add your Neo4j database credentials to `samples/.env`:
-
-```
-NEO4J_URI=neo4j+s://xxx.databases.neo4j.io
-NEO4J_USERNAME=neo4j
-NEO4J_PASSWORD=your-password
-```
-
-### Step 5: Run the Samples
-
-```bash
-uv run start-samples      # Interactive menu
-uv run start-samples 3    # Run specific demo
-```
-
-See [samples/README.md](samples/README.md) for complete setup instructions including prerequisites, database configuration, and troubleshooting.
-
-## Available Samples
-
-### Financial Documents Database
-
-These samples use a Neo4j database containing SEC filings with Company, Document, Chunk, RiskFactor, and Product nodes.
-
-| Sample | Description | Context Provider Configuration |
-|--------|-------------|-------------------------------|
-| [**Basic Fulltext**](samples/src/samples/basic_fulltext/main.py) | Demonstrates keyword-based search using BM25 scoring. Searches document chunks for terms like "Microsoft products" or "risk factors" and returns matching text. | `index_type="fulltext"`, `index_name="search_chunks"`, `top_k=3` |
-| [**Vector Search**](samples/src/samples/vector_search/main.py) | Demonstrates semantic similarity search using Azure AI embeddings. Finds conceptually related content even when exact keywords don't match. | `index_type="vector"`, `index_name="chunkEmbeddings"`, requires `AzureAIEmbedder`, `top_k=5` |
-| [**Graph-Enriched**](samples/src/samples/graph_enriched/main.py) | Combines vector search with graph traversal. After finding relevant chunks, traverses `Chunk → Document ← Company → RiskFactor/Product` relationships to return company context, products, and risk factors alongside the matched text. | `index_type="vector"`, `retrieval_query` with Cypher traversal, `top_k=5` |
-
-### Aircraft Domain Database
-
-These samples use a separate Neo4j database with Aircraft, System, Component, MaintenanceEvent, Flight, Delay, and Airport nodes.
-
-| Sample | Description | Context Provider Configuration |
-|--------|-------------|-------------------------------|
-| [**Aircraft Maintenance**](samples/src/samples/aircraft_domain/maintenance_search.py) | Searches maintenance event records for faults (vibration, electrical, sensor drift). Graph traversal enriches results with the affected aircraft tail number, system name, and component, enabling questions like "What maintenance issues involve vibration?" | `index_type="fulltext"`, `index_name="maintenance_search"`, `retrieval_query` traverses `MaintenanceEvent ← Component ← System ← Aircraft` |
-| [**Flight Delays**](samples/src/samples/aircraft_domain/flight_delays.py) | Searches flight delay records by cause (weather, security). Graph traversal enriches results with flight number, aircraft, and route (origin → destination airports), enabling operations analysis like "What flights were delayed due to weather?" | `index_type="fulltext"`, `index_name="delay_search"`, `retrieval_query` traverses `Delay ← Flight → Aircraft/Airport`, `top_k=2` |
-| [**Component Health**](samples/src/samples/aircraft_domain/component_health.py) | Searches aircraft components by name/type (turbine, fuel pump). Graph traversal enriches results with the parent system, aircraft, and maintenance event count, enabling health analysis like "What turbine components have maintenance issues?" | `index_type="fulltext"`, `index_name="component_search"`, `retrieval_query` traverses `Component ← System ← Aircraft` and counts `MaintenanceEvent` nodes |
-
-### Memory Provider
-
-This sample demonstrates persistent agent memory using Neo4j as the storage backend.
-
-| Sample | Description | Context Provider Configuration |
-|--------|-------------|-------------------------------|
-| [**Neo4j Memory**](samples/src/samples/memory_basic/main.py) | Stores conversation memories in Neo4j and retrieves them across sessions using semantic vector search. Demonstrates cross-conversation memory persistence, user-scoped isolation, and semantic recall (finding related memories even with different phrasing). | `memory_enabled=True`, `user_id="..."`, requires `AzureAIEmbedder` for semantic search |
-
-**Memory Features:**
-- **Persistent storage**: Memories stored as `Memory` nodes in Neo4j with embeddings
-- **Semantic retrieval**: Vector similarity search finds relevant past conversations
-- **User isolation**: Scoping by `user_id`, `thread_id`, `agent_id`, or `application_id`
-- **Lazy initialization**: Indexes created automatically on first use
-
-**Example:**
-```python
-provider = Neo4jContextProvider(
-    uri=settings.uri,
-    username=settings.username,
-    password=settings.get_password(),
-    memory_enabled=True,
-    user_id="alice",  # Scope memories to this user
-    index_name="search_chunks",
-    index_type="fulltext",
-    embedder=embedder,  # For semantic memory search
-)
-```
-
-## Development
-
-### Run Tests
-
-```bash
-uv run pytest
-```
-
-### Build the Library
-
-```bash
-uv build --package agent-framework-neo4j
-```
-
-### Type Checking and Linting
-
-```bash
-uv run mypy packages/agent-framework-neo4j/agent_framework_neo4j
-uv run ruff check packages/agent-framework-neo4j/agent_framework_neo4j
-```
-
-## Publishing to PyPI
-
-```bash
-# Bump version
-./scripts/version-bump.sh patch   # or major/minor
-
-# Build and publish
-uv build --package agent-framework-neo4j
-uv publish --token $PYPI_TOKEN
-```
-
-See [docs/PUBLISH.md](docs/PUBLISH.md) for the complete publishing guide including authentication options and TestPyPI testing.
-
-## Project Structure
-
-```
-neo4j-maf-provider/
-├── packages/agent-framework-neo4j/   # Publishable PyPI library
-├── samples/                           # Self-contained demo applications
-│   ├── azure.yaml                     # Azure Developer CLI config
-│   ├── infra/                         # Azure Bicep templates
-│   └── ...
-├── tests/                             # Library tests
-└── docs/                              # Documentation
-```
-
-## Packages
-
-### agent-framework-neo4j
-
-The core library providing Neo4j context for Microsoft Agent Framework agents.
+## Quick Start (Python)
 
 ```bash
 pip install agent-framework-neo4j --pre
 ```
 
-**Public API:**
-- `Neo4jContextProvider` - Main context provider class
-- `Neo4jSettings` - Pydantic settings for Neo4j connection
-- `AzureAISettings` - Pydantic settings for Azure AI
-- `AzureAIEmbedder` - Azure AI embedding integration
-- `FulltextRetriever` - Fulltext search retriever
-
-**Basic usage:**
 ```python
 from agent_framework_neo4j import Neo4jContextProvider, Neo4jSettings
 
@@ -284,26 +66,59 @@ async with provider:
     pass
 ```
 
-See [packages/agent-framework-neo4j/README.md](packages/agent-framework-neo4j/README.md) for detailed API documentation.
+See [python/README.md](python/README.md) for complete documentation.
 
-### neo4j-provider-samples
+## Repository Structure
 
-Demo applications in `samples/` showing the library in action:
-- Basic fulltext search
-- Vector similarity search
-- Graph-enriched context
-- Aircraft domain examples
-- **Neo4j memory provider** - Persistent agent memory with semantic retrieval
-
-See [samples/README.md](samples/README.md) for setup and usage.
+```
+neo4j-maf-provider/
+├── python/                    # Python implementation
+│   ├── packages/              # Publishable PyPI library
+│   ├── samples/               # Demo applications
+│   ├── tests/                 # Test suite
+│   └── docs/                  # Python documentation
+├── dotnet/                    # .NET implementation (planned)
+├── docs/                      # Shared documentation
+├── README.md                  # This file
+├── CONTRIBUTING.md            # Contribution guidelines
+└── LICENSE                    # MIT license
+```
 
 ## Documentation
 
-**Project docs:**
-- [Architecture](docs/architecture.md) - Design principles, search flow, components
-- [Publishing Guide](docs/PUBLISH.md) - Build and publish to PyPI
+### Shared Documentation
 
-**External resources:**
+- [Architecture](docs/architecture.md) - Design principles, search flow, components
+
+### Python Documentation
+
+- [Python README](python/README.md) - Quick start and installation
+- [Development Setup](python/DEV_SETUP.md) - Development environment
+- [API Reference](python/docs/api_reference.md) - Public API
+- [Publishing Guide](python/docs/PUBLISH.md) - PyPI publication
+
+## Samples
+
+The Python implementation includes demo applications:
+
+| Category | Samples |
+|----------|---------|
+| **Financial Documents** | Basic fulltext, vector search, graph-enriched |
+| **Aircraft Domain** | Maintenance search, flight delays, component health |
+| **Memory** | Persistent agent memory with semantic retrieval |
+
+```bash
+cd python
+uv sync --prerelease=allow
+uv run start-samples
+```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on contributing to this project.
+
+## External Resources
+
 - [Microsoft Agent Framework](https://aka.ms/agent-framework)
 - [Agent Framework Python Packages](https://github.com/microsoft/agent-framework/tree/main/python/packages)
 - [Neo4j GraphRAG Python](https://neo4j.com/docs/neo4j-graphrag-python/)
