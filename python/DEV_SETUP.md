@@ -160,12 +160,8 @@ See [docs/PUBLISH.md](docs/PUBLISH.md) for the complete publishing guide.
 
 Quick version:
 ```bash
-# Bump version
-./scripts/version-bump.sh patch
-
-# Build and publish
-uv build --package agent-framework-neo4j
-uv publish --token $PYPI_TOKEN
+# Update version in pyproject.toml and __init__.py, then:
+./scripts/publish.sh $PYPI_TOKEN
 ```
 
 ## Troubleshooting

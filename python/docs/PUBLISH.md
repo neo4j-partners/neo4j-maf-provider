@@ -10,19 +10,30 @@ This guide covers building and publishing the `agent-framework-neo4j` package to
 
 ## Version Management
 
-Use the version bump script to update versions in both `pyproject.toml` and `__init__.py`:
+Update versions in both files before publishing:
+
+- `packages/agent-framework-neo4j/pyproject.toml` - the `version` field
+- `packages/agent-framework-neo4j/agent_framework_neo4j/__init__.py` - the `__version__` variable
+
+Both must match. Follow [semantic versioning](https://semver.org/):
+- **major** (1.0.0) - Breaking changes
+- **minor** (0.2.0) - New features, backwards compatible
+- **patch** (0.1.1) - Bug fixes, backwards compatible
+
+## Quick Publish
+
+Use the publish script for a single-command build and publish:
 
 ```bash
-./scripts/version-bump.sh major   # 0.1.0 → 1.0.0
-./scripts/version-bump.sh minor   # 0.1.0 → 0.2.0
-./scripts/version-bump.sh patch   # 0.1.0 → 0.1.1
+./scripts/publish.sh <pypi-token>
 ```
 
-The script updates:
-- `packages/agent-framework-neo4j/pyproject.toml`
-- `packages/agent-framework-neo4j/agent_framework_neo4j/__init__.py`
+The script:
+1. Cleans the `dist/` directory
+2. Builds the package with `uv build`
+3. Publishes to PyPI with `uv publish`
 
-## Build
+## Manual Build
 
 ```bash
 # Build the package (only the library, not samples)
@@ -73,8 +84,9 @@ See: https://docs.pypi.org/trusted-publishers/
 Complete workflow from version bump to publish:
 
 ```bash
-# 1. Bump version
-./scripts/version-bump.sh patch
+# 1. Update version in both files
+#    - packages/agent-framework-neo4j/pyproject.toml
+#    - packages/agent-framework-neo4j/agent_framework_neo4j/__init__.py
 
 # 2. Review changes
 git diff
@@ -87,13 +99,10 @@ git add -A
 git commit -m "Bump version to X.Y.Z"
 git tag vX.Y.Z
 
-# 5. Build
-uv build --package agent-framework-neo4j
+# 5. Build and publish
+./scripts/publish.sh $PYPI_TOKEN
 
-# 6. Publish
-uv publish --token $PYPI_TOKEN
-
-# 7. Push to remote
+# 6. Push to remote
 git push && git push --tags
 ```
 
